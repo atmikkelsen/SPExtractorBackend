@@ -27,7 +27,7 @@ public class SiteService {
     }
 
     // Hardcoded Bearer Token (Replace this with your actual token)
-    private static final String BEARER_TOKEN = "s";
+    private static final String BEARER_TOKEN = "";
 
     public List<SiteDTO> fetchAllSites() {
         String url = graphApiBaseUrl + "/sites?search=*";
