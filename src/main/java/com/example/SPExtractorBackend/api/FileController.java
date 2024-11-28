@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 @RestController
 @RequestMapping("/api/files")
-@CrossOrigin(origins = "http://127.0.0.1:5500") // Tilpasses efter frontend URL
+@CrossOrigin(origins = "http://127.0.0.1:5500")
 public class FileController {
 
     @Autowired
@@ -18,7 +18,7 @@ public class FileController {
 
     @GetMapping("/{siteId}")
     public List<FileDTO> getFilesBySite(@PathVariable Long siteId) {
-        return fileService.getFilesBySite(siteId); // Sørg for, at FileService matcher
+        return fileService.getFilesBySite(siteId);
     }
 }
 

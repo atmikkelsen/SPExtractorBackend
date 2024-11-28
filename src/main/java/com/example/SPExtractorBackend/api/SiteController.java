@@ -14,7 +14,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/sites")
-@CrossOrigin(origins = "http://127.0.0.1:5500") // Adjust based on frontend URL
+@CrossOrigin(origins = "http://127.0.0.1:5500")
 public class SiteController {
 
     private final SiteService siteService;
@@ -25,14 +25,22 @@ public class SiteController {
     }
 
     @GetMapping
-    public ResponseEntity<List<SiteDTO>> getAllSites() {
+    public ResponseEntity<List<SiteDTO>> getAllSites(@RequestHeader("Authorization") String authorizationHeader) {
         try {
-            List<SiteDTO> sites = siteService.fetchAllSites();
+            if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(Collections.emptyList());
+            }
+            String token = authorizationHeader.substring(7);
+
+            // Pass token to the service
+            List<SiteDTO> sites = siteService.fetchAllSites(token);
             System.out.printf("Sites fetched successfully from Microsoft Graph API%n");
 
             return ResponseEntity.ok(sites);
 
         } catch (Exception e) {
+            e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Collections.emptyList());
         }

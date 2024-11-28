@@ -26,16 +26,14 @@ public class SiteService {
         this.restTemplate = restTemplateBuilder.build();
     }
 
-    // Hardcoded Bearer Token (Replace this with your actual token)
-    @Value("${bearer.token}")
-    private String BEARER_TOKEN;
+//    @Value("${bearer.token}")
+//    private String BEARER_TOKEN;
 
-    public List<SiteDTO> fetchAllSites() {
+    public List<SiteDTO> fetchAllSites(String bearerToken) {
         String url = graphApiBaseUrl + "/sites?search=*";
 
-        // Set the Authorization header with the hardcoded token
         HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(BEARER_TOKEN); // Add Bearer token
+        headers.setBearerAuth(bearerToken);
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
