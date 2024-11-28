@@ -27,7 +27,8 @@ public class SiteService {
     }
 
     // Hardcoded Bearer Token (Replace this with your actual token)
-    private static final String BEARER_TOKEN = "";
+    @Value("${bearer.token}")
+    private String BEARER_TOKEN;
 
     public List<SiteDTO> fetchAllSites() {
         String url = graphApiBaseUrl + "/sites?search=*";
@@ -43,6 +44,7 @@ public class SiteService {
                 url, HttpMethod.GET, requestEntity, GraphSitesResponse.class);
 
         if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+
             return response.getBody().getValue().stream()
                     .map(site -> new SiteDTO(site.getId(), site.getName(), site.getWebUrl(), site.getDisplayName()))
                     .collect(Collectors.toList());
