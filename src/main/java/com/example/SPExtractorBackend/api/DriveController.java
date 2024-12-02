@@ -1,6 +1,6 @@
 package com.example.SPExtractorBackend.api;
 
-import com.example.SPExtractorBackend.dto.SiteDTO;
+import com.example.SPExtractorBackend.dto.DriveDTO;
 import com.example.SPExtractorBackend.service.SiteService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,21 +12,21 @@ import java.util.Collections;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/sites")
+@RequestMapping("/api/drives")
 @CrossOrigin(origins = "http://127.0.0.1:5500")
-public class SiteController {
+public class DriveController {
 
     private final SiteService siteService;
     @Value("${bearer.token}")
     private String BEARER_TOKEN;
 
     @Autowired
-    public SiteController(SiteService siteService) {
+    public DriveController(SiteService siteService) {
         this.siteService = siteService;
     }
 
     @GetMapping
-    public ResponseEntity<List<SiteDTO>> getAllSites(@RequestHeader("Authorization") String authorizationHeader) {
+    public ResponseEntity<List<DriveDTO>> getAllDrives(@RequestHeader("Authorization") String authorizationHeader, @RequestParam String siteId) {
         try {
             if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -34,11 +34,9 @@ public class SiteController {
             }
             String token = authorizationHeader.substring(7);
 
-            // Pass token to the service
-            List<SiteDTO> sites = siteService.fetchAllSites(token);
+            List<DriveDTO> sites = siteService.fetchAllDrives(token, siteId);
             System.out.printf("Sites fetched successfully from Microsoft Graph API%n");
             return ResponseEntity.ok(sites);
-
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -46,24 +44,18 @@ public class SiteController {
         }
     }
 
-    @GetMapping("/{siteId}")
-    public ResponseEntity<SiteDTO> getSiteById(@PathVariable String siteId) {
-        String token = BEARER_TOKEN;
-
-        // Pass token to the service
-        SiteDTO site = siteService.fetchSiteById(token, siteId);
-        System.out.printf("Site fetched successfully from Microsoft Graph API%n");
-        return ResponseEntity.ok(site);
-    }
-
     @GetMapping("/no-header")
-    public ResponseEntity<List<SiteDTO>> getAllSites() {
+    public ResponseEntity<List<DriveDTO>> getAllDrives() {
         String token = BEARER_TOKEN;
+        String siteId = "hjerteforeningen.sharepoint.com,c68e317f-7947-4eb3-a895-abdbb2fab90c,ddb0d5a1-43e4-4e22-a682-fc418014c56f";
 
-        List<SiteDTO> sites = siteService.fetchAllSites(token);
+
+        List<DriveDTO> drives = siteService.fetchAllDrives(token, siteId);
         System.out.printf("Sites fetched successfully from Microsoft Graph API without header %n");
         //System.out.println(sites.get(10).getId());
 
-        return ResponseEntity.ok(sites);
+        return ResponseEntity.ok(drives);
+
+
     }
 }

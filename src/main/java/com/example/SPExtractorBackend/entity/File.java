@@ -9,7 +9,6 @@ import java.time.LocalDateTime;
 
 @Getter
 @Setter
-@ToString(exclude = "site")
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -21,12 +20,12 @@ public class File {
 
     private int id;
     private String name;
-    private Long size;
+    private int size;
     private String drive;
     private String url;
     private LocalDateTime lastModified;
     private String owner;
-    private Long siteId;
+    private String siteId;
 
 
 }
