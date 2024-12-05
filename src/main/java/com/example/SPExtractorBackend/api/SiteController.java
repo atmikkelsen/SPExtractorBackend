@@ -13,7 +13,11 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/sites")
-@CrossOrigin(origins = "http://127.0.0.1:5500")
+@CrossOrigin(
+        origins = "http://127.0.0.1:5500",
+        allowedHeaders = {"Authorization", "Content-Type"},
+        methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.OPTIONS}
+)
 public class SiteController {
 
     private final SiteService siteService;
@@ -36,7 +40,7 @@ public class SiteController {
 
             // Pass token to the service
             List<SiteDTO> sites = siteService.fetchAllSites(token);
-            System.out.printf("Sites fetched successfully from Microsoft Graph API%n");
+            System.out.printf("All sites fetched successfully from Microsoft Graph API%n");
             return ResponseEntity.ok(sites);
 
         } catch (Exception e) {
@@ -52,7 +56,7 @@ public class SiteController {
 
         // Pass token to the service
         SiteDTO site = siteService.fetchSiteById(token, siteId);
-        System.out.printf("Site fetched successfully from Microsoft Graph API%n");
+        System.out.printf("Specific fetched successfully from Microsoft Graph API%n");
         return ResponseEntity.ok(site);
     }
 

@@ -1,12 +1,9 @@
 package com.example.SPExtractorBackend.service;
 
 import com.example.SPExtractorBackend.dto.DriveDTO;
-import com.example.SPExtractorBackend.dto.LargeFileDTO;
 import com.example.SPExtractorBackend.dto.SiteDTO;
 import com.example.SPExtractorBackend.response.GraphDrivesResponse;
-import com.example.SPExtractorBackend.response.GraphItemsResponse;
 import com.example.SPExtractorBackend.response.GraphSitesResponse;
-import com.microsoft.graph.models.Drive;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
@@ -14,7 +11,6 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -95,6 +91,26 @@ public class SiteService {
                     .collect(Collectors.toList());
         } else {
             throw new RuntimeException("Failed to fetch drives from Microsoft Graph API");
+        }
+    }
+
+    public DriveDTO fetchDriveById(String token, String driveId) {
+        String url = graphApiBaseUrl + "/drives/" + driveId;
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
+
+        ResponseEntity<DriveDTO> response = restTemplate.exchange(
+                url, HttpMethod.GET, requestEntity, DriveDTO.class);
+
+        if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+            System.out.println(response.getBody().getName());
+            return response.getBody();
+        } else {
+            throw new RuntimeException("Failed to fetch drive from Microsoft Graph API");
         }
     }
 }

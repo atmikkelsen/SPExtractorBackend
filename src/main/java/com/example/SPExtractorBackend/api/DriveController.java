@@ -13,7 +13,11 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/drives")
-@CrossOrigin(origins = "http://127.0.0.1:5500")
+@CrossOrigin(
+        origins = "http://127.0.0.1:5500",
+        allowedHeaders = {"Authorization", "Content-Type"},
+        methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.OPTIONS}
+)
 public class DriveController {
 
     private final SiteService siteService;
@@ -34,15 +38,24 @@ public class DriveController {
             }
             String token = authorizationHeader.substring(7);
 
-            List<DriveDTO> sites = siteService.fetchAllDrives(token, siteId);
-            System.out.printf("Sites fetched successfully from Microsoft Graph API%n");
-            return ResponseEntity.ok(sites);
+            List<DriveDTO> drives = siteService.fetchAllDrives(token, siteId);
+            System.out.printf("All drives fetched successfully from Microsoft Graph API%n");
+            return ResponseEntity.ok(drives);
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Collections.emptyList());
         }
     }
+
+    @GetMapping("/{driveId}")
+    public ResponseEntity<DriveDTO> getDriveById(@PathVariable String driveId) {
+        String token = BEARER_TOKEN;
+        DriveDTO drive = siteService.fetchDriveById(token, driveId);
+        System.out.printf("Specific drive fetched successfully from Microsoft Graph API%n");
+        return ResponseEntity.ok(drive);
+    }
+
 
     @GetMapping("/no-header")
     public ResponseEntity<List<DriveDTO>> getAllDrives() {
