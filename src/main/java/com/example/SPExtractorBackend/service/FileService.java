@@ -58,7 +58,8 @@ public class FileService {
                                 item.getName(),
                                 item.getSize(),
                                 item.getWebUrl(),
-                                item.getLastModifiedDateTime()
+                                item.getLastModifiedDateTime(),
+                                item.getLastModifiedBy().getUser().getDisplayName()
                         ));
                     }
                 }

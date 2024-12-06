@@ -9,6 +9,7 @@ import java.util.List;
 @Getter
 public class GraphFilesResponse {
     private List<Item> value; // Ensure this matches the JSON response
+    private String nextLink;
 
     @Setter
     @Getter
@@ -20,6 +21,8 @@ public class GraphFilesResponse {
         private File file;
         private Folder folder;
         private LocalDateTime lastModifiedDateTime;
+        private User lastModifiedBy;
+        private User createdBy;
 
 
         public boolean isFolder() {
@@ -28,6 +31,19 @@ public class GraphFilesResponse {
 
         public boolean isFile() {
             return file != null;
+        }
+        @Setter
+        @Getter
+        public static class User {
+            private UserDetail user;
+        }
+
+        @Setter
+        @Getter
+        public static class UserDetail {
+            private String email;
+            private String id;
+            private String displayName;
         }
     }
 
