@@ -1,5 +1,4 @@
 package com.example.SPExtractorBackend.response;
-import com.example.SPExtractorBackend.dto.FileDTO;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -9,17 +8,38 @@ import java.util.List;
 @Setter
 @Getter
 public class GraphFilesResponse {
-    private List<FileDTO> value;
+    private List<Item> value; // Ensure this matches the JSON response
 
-    @Getter
     @Setter
-    public static class FileDTO {
+    @Getter
+    public static class Item {
+        private String id;
         private String name;
-        private int size;
-        private String libraryName;
         private String webUrl;
+        private int size;
+        private File file;
+        private Folder folder;
         private LocalDateTime lastModifiedDateTime;
+
+
+        public boolean isFolder() {
+            return folder != null;
+        }
+
+        public boolean isFile() {
+            return file != null;
+        }
     }
 
+    @Setter
+    @Getter
+    public static class File {
+        private String mimeType;
+    }
 
+    @Setter
+    @Getter
+    public static class Folder {
+        private int childCount;
+    }
 }

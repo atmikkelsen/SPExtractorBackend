@@ -10,8 +10,9 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 public class FileService {
@@ -24,9 +25,13 @@ public class FileService {
     public FileService(RestTemplateBuilder restTemplateBuilder) {
         this.restTemplate = restTemplateBuilder.build();
     }
-
     public List<FileDTO> fetchAllFiles(String bearerToken, String driveId) {
-        String url = graphApiBaseUrl + "/drives/" + driveId + "/root/children";
+        List<FileDTO> files = new ArrayList<>();
+        fetchFilesRecursively(bearerToken, driveId, "/root", files);
+        return files;
+    }
+    private void fetchFilesRecursively(String bearerToken, String driveId, String itemId, List<FileDTO> files) {
+        String url = graphApiBaseUrl + "/drives/" + driveId + "/items/" + itemId + "/children";
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(bearerToken);
@@ -38,19 +43,33 @@ public class FileService {
                 url, HttpMethod.GET, requestEntity, GraphFilesResponse.class);
 
         if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-            System.out.println("Files fetched successfully from Microsoft Graph API"
-                    + response.getBody().getValue().size() + " files");
-            return response.getBody().getValue().stream()
-                    .map(file -> new FileDTO(
-                            file.getName(),
-                            file.getSize(),
-                            file.getWebUrl(),
-                            file.getLastModifiedDateTime()))
-                    .collect(Collectors.toList());
+            List<GraphFilesResponse.Item> items = response.getBody().getValue();
+            if (items != null) {
+                System.out.println("Items: " + items.size());
+                for (GraphFilesResponse.Item item : items) {
+                    System.out.println("Item: " + item.getName()  + " Size: " + item.getSize()/ 1024/ 1024 + " MB");
+                    if (item.isFolder()) {
+                        System.out.println("Folder: " + item.getName());
+                        // It's a folder, recurse into it
+                        fetchFilesRecursively(bearerToken, driveId, item.getId(), files);
+                    } else if (item.getSize() > 15 *1024 * 1024 || item.getLastModifiedDateTime().isAfter(LocalDateTime.now().minusDays(30))) {
+                        // It's a file, and size is > 2 MB
+                        files.add(new FileDTO(
+                                item.getName(),
+                                item.getSize(),
+                                item.getWebUrl(),
+                                item.getLastModifiedDateTime()
+                        ));
+                    }
+                }
+            } else {
+                System.out.println("No items found in the response.");
+            }
         } else {
-            throw new RuntimeException("Failed to fetch files from Microsoft Graph API");
+            throw new RuntimeException("Failed to fetch files from Microsoft Graph API for item: " + itemId);
         }
     }
+
 
 
 }
