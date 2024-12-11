@@ -13,13 +13,15 @@ public class FileDTO {
     private String webUrl;
     private LocalDateTime lastModifiedDateTime;
     private String lastModifiedByDisplayName;
+    private String driveId;
 
-    public FileDTO(String name, long size, String webUrl, LocalDateTime lastModifiedDateTime, String lastModifiedByDisplayName) {
+    public FileDTO(String name, long size, String webUrl, LocalDateTime lastModifiedDateTime, String lastModifiedByDisplayName, String driveId) {
         this.name = name;
         this.size = size;
         this.webUrl = webUrl;
         this.lastModifiedDateTime = lastModifiedDateTime;
         this.lastModifiedByDisplayName = lastModifiedByDisplayName;
+        this.driveId = driveId;
     }
 
 }

@@ -12,7 +12,7 @@ import lombok.*;
 
 @Entity
 
-public class AppUser {
+public class Drive {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int id;

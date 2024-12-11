@@ -2,6 +2,8 @@ package com.example.SPExtractorBackend.service;
 
 
 import com.example.SPExtractorBackend.dto.FileDTO;
+import com.example.SPExtractorBackend.entity.File;
+import com.example.SPExtractorBackend.repository.FileRepository;
 import com.example.SPExtractorBackend.response.GraphFilesResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,23 +22,61 @@ import java.util.concurrent.Executors;
 @Service
 public class FileService {
     private final RestTemplate restTemplate;
+    private final FileRepository fileRepository;
 
     @Value("${graph.api.base-url}")
     private String graphApiBaseUrl;
 
     @Autowired
-    public FileService(RestTemplateBuilder restTemplateBuilder) {
+    public FileService(RestTemplateBuilder restTemplateBuilder, FileRepository fileRepository) {
         this.restTemplate = restTemplateBuilder.build();
+        this.fileRepository = fileRepository;
     }
+
+
     public List<FileDTO> fetchAllFiles(String bearerToken, String driveId) {
+
+        // Define the threshold for data freshness (e.g., 1 hour ago)
+        LocalDateTime threshold = LocalDateTime.now().minusHours(24);
+
+        System.out.println("Fetching cached files for driveId: " + driveId);
+        System.out.println("Using threshold: " + threshold);
+
+
+        // Check if recent files exist in the database
+        List<File> cachedFiles = fileRepository.findRecentFilesByDriveId(driveId, threshold);
+        System.out.println("Cached files found: " + cachedFiles.size());
+
+        if (!cachedFiles.isEmpty()) {
+            return cachedFiles.stream()
+                    .map(this::mapToFileDTO)
+                    .toList();
+        }else {
+            System.out.println("No recent cached files found. Fetching from Microsoft Graph...");
+        }
+
+        // Fetch fresh data from Microsoft Graph if no recent data is available
+
         List<FileDTO> files = new ArrayList<>();
         fetchFilesRecursively(bearerToken, driveId, "/root", files);
+
+        // Save the files to the database with updated timestamps
+        List<File> entities = files.stream()
+                .map(fileDTO -> {
+                    File entity = mapToFileEntity(fileDTO);
+                    entity.setLastUpdated(LocalDateTime.now()); // Update timestamp
+                    return entity;
+                })
+                .toList();
+        fileRepository.saveAll(entities);
+
         return files;
     }
 
+
+
     private void fetchFilesRecursively(String bearerToken, String driveId, String itemId, List<FileDTO> files) {
         String url = graphApiBaseUrl + "/drives/" + driveId + "/items/" + itemId + "/children";
-        System.out.println("Fetching from URL: " + url);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(bearerToken);
@@ -70,6 +110,7 @@ public class FileService {
         }
     }
 
+
     private void processItemsInBatches(List<GraphFilesResponse.Item> items, String bearerToken, String driveId, List<FileDTO> files) {
         final int batchSize = 10; // Number of items per batch
         ExecutorService executor = Executors.newFixedThreadPool(5); // Limit concurrent threads
@@ -96,22 +137,54 @@ public class FileService {
     private void processItem(GraphFilesResponse.Item item, String bearerToken, String driveId, List<FileDTO> files) {
         if (item.isFolder()) {
             // Recurse into subfolders
-            System.out.println("Folder detected: " + item.getName());
             fetchFilesRecursively(bearerToken, driveId, item.getId(), files);
         } else if (item.getSize() > 15 * 1024 * 1024 ||
                 item.getLastModifiedDateTime().isBefore(LocalDateTime.now().minusDays(365))) {
-            // Add the file to the list if it meets the criteria
+            // Create a DTO for the file
+            FileDTO fileDTO = new FileDTO(
+                    item.getName(),
+                    item.getSize(),
+                    item.getWebUrl(),
+                    item.getLastModifiedDateTime(),
+                    item.getLastModifiedBy().getUser().getDisplayName(),
+                    driveId
+            );
+
+            // Convert to entity and save to the database
+            File entity = mapToFileEntity(fileDTO);
+            entity.setLastUpdated(LocalDateTime.now());
+            fileRepository.save(entity);
+
+            // Add to the in-memory list for return
             synchronized (files) { // Synchronize to avoid concurrency issues
-                files.add(new FileDTO(
-                        item.getName(),
-                        item.getSize(),
-                        item.getWebUrl(),
-                        item.getLastModifiedDateTime(),
-                        item.getLastModifiedBy().getUser().getDisplayName()
-                ));
+                files.add(fileDTO);
             }
         }
     }
+
+
+    private File mapToFileEntity(FileDTO dto) {
+        File entity = new File();
+        entity.setName(dto.getName());
+        entity.setSize(dto.getSize());
+        entity.setWebUrl(dto.getWebUrl());
+        entity.setLastModifiedDateTime(dto.getLastModifiedDateTime());
+        entity.setLastModifiedByDisplayName(dto.getLastModifiedByDisplayName());
+        entity.setDriveId(dto.getDriveId());
+        return entity;
+    }
+
+    private FileDTO mapToFileDTO(File entity) {
+        return new FileDTO(
+                entity.getName(),
+                entity.getSize(),
+                entity.getWebUrl(),
+                entity.getLastModifiedDateTime(),
+                entity.getLastModifiedByDisplayName(),
+                entity.getDriveId()
+        );
+    }
+
 
 
 //

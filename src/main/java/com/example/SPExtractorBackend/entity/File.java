@@ -17,15 +17,18 @@ import java.time.LocalDateTime;
 public class File {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY) // or another strategy as per your DB requirements
-
     private int id;
     private String name;
     private long size;
-    private String drive;
-    private String url;
-    private LocalDateTime lastModified;
-    private String owner;
-    private String siteId;
+    @Column(name = "web_url", columnDefinition = "TEXT")
+    private String webUrl;
+    private LocalDateTime lastModifiedDateTime;
+    private String lastModifiedByDisplayName;
+    private String driveId;
+    @Column(name = "last_updated")
+    private LocalDateTime lastUpdated;
+
+
 
 
 }

@@ -37,7 +37,6 @@ public class FileController {
             String token = authorizationHeader.substring(7);
 
             List<FileDTO> files = fileService.fetchAllFiles(token, driveId);
-            System.out.printf("Files fetched successfully from Microsoft Graph API%n");
             return ResponseEntity.ok(files);
         } catch (HttpClientErrorException e) {
             if (e.getStatusCode().equals(HttpStatus.UNAUTHORIZED)) {
