@@ -1,9 +1,7 @@
 package com.example.SPExtractorBackend.service;
 
 import com.example.SPExtractorBackend.dto.DriveDTO;
-import com.example.SPExtractorBackend.dto.SiteDTO;
 import com.example.SPExtractorBackend.response.GraphDrivesResponse;
-import com.example.SPExtractorBackend.response.GraphSitesResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
@@ -15,44 +13,45 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
-public class SiteService {
+public class DriveService {
     private final RestTemplate restTemplate;
 
     @Value("${graph.api.base-url}")
     private String graphApiBaseUrl;
 
     @Autowired
-    public SiteService(RestTemplateBuilder restTemplateBuilder) {
+    public DriveService(RestTemplateBuilder restTemplateBuilder) {
         this.restTemplate = restTemplateBuilder.build();
     }
 
 
-    public List<SiteDTO> fetchAllSites(String bearerToken) {
-        String url = graphApiBaseUrl + "/sites?search=*";
+    public List<DriveDTO> fetchAllDrives(String bearerToken, String siteId) {
+        String url = graphApiBaseUrl + "/sites/" + siteId + "/drives";
+
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(bearerToken);
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        System.out.println("Bearer token: " + bearerToken);
-
         HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
 
-        ResponseEntity<GraphSitesResponse> response = restTemplate.exchange(
-                url, HttpMethod.GET, requestEntity, GraphSitesResponse.class);
+        ResponseEntity<GraphDrivesResponse> response = restTemplate.exchange(
+                url, HttpMethod.GET, requestEntity, GraphDrivesResponse.class);
+
+        System.out.println(response.getBody());
 
         if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
 
             return response.getBody().getValue().stream()
-                    .map(site -> new SiteDTO(site.getId(), site.getName(), site.getWebUrl(), site.getDisplayName()))
+                    .map(drive -> new DriveDTO(drive.getId(), drive.getName(), drive.getWebUrl(), drive.getLastModifiedDateTime()))
                     .collect(Collectors.toList());
         } else {
-            throw new RuntimeException("Failed to fetch sites from Microsoft Graph API");
+            throw new RuntimeException("Failed to fetch drives from Microsoft Graph API");
         }
     }
 
-    public SiteDTO fetchSiteById(String bearerToken, String siteId) {
-        String url = graphApiBaseUrl + "/sites/" + siteId;
+    public DriveDTO fetchDriveById(String bearerToken, String driveId) {
+        String url = graphApiBaseUrl + "/drives/" + driveId;
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(bearerToken);
@@ -60,15 +59,18 @@ public class SiteService {
 
         HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
 
-        ResponseEntity<SiteDTO> response = restTemplate.exchange(
-                url, HttpMethod.GET, requestEntity, SiteDTO.class);
+        ResponseEntity<DriveDTO> response = restTemplate.exchange(
+                url, HttpMethod.GET, requestEntity, DriveDTO.class);
 
         if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
             System.out.println(response.getBody().getName());
             return response.getBody();
         } else {
-            throw new RuntimeException("Failed to fetch site from Microsoft Graph API");
+            throw new RuntimeException("Failed to fetch drive from Microsoft Graph API");
         }
     }
+
+
+
 
 }
