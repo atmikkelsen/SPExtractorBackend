@@ -9,12 +9,12 @@ import java.time.LocalDateTime;
 
 public class FileDTO {
     private String name;
-    private int size;
+    private long size;
     private String webUrl;
     private LocalDateTime lastModifiedDateTime;
     private String lastModifiedByDisplayName;
 
-    public FileDTO(String name, int size, String webUrl, LocalDateTime lastModifiedDateTime, String lastModifiedByDisplayName) {
+    public FileDTO(String name, long size, String webUrl, LocalDateTime lastModifiedDateTime, String lastModifiedByDisplayName) {
         this.name = name;
         this.size = size;
         this.webUrl = webUrl;

@@ -20,7 +20,7 @@ public class File {
 
     private int id;
     private String name;
-    private int size;
+    private long size;
     private String drive;
     private String url;
     private LocalDateTime lastModified;

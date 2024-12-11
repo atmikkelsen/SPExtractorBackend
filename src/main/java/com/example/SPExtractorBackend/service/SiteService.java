@@ -34,8 +34,6 @@ public class SiteService {
         headers.setBearerAuth(bearerToken);
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        System.out.println("Bearer token: " + bearerToken);
-
         HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
 
         ResponseEntity<GraphSitesResponse> response = restTemplate.exchange(

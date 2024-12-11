@@ -17,7 +17,7 @@ public class GraphFilesResponse {
         private String id;
         private String name;
         private String webUrl;
-        private int size;
+        private long size;
         private File file;
         private Folder folder;
         private LocalDateTime lastModifiedDateTime;
