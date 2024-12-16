@@ -17,11 +17,13 @@ import java.util.List;
 @NoArgsConstructor
 
 @Entity
+@Table(name = "site")
 public class Site {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    private String id;
     private String name;
-    private String url;
-    private String owner;
+    private String webUrl;
+    private String displayName;
+    private LocalDateTime lastUpdated;
 }
+

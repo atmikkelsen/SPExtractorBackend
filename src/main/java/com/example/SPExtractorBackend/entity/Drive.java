@@ -3,6 +3,8 @@ package com.example.SPExtractorBackend.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDateTime;
+
 @Getter
 @Setter
 @ToString
@@ -11,12 +13,15 @@ import lombok.*;
 @Builder
 
 @Entity
-
 public class Drive {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    private String id;
+
     private String name;
-    private String email;
-    private String microsoftId;
+    private String webUrl;
+    private LocalDateTime lastModifiedDateTime;
+    private String siteId;
+    private String siteName;
+
 }
+

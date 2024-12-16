@@ -1,6 +1,8 @@
 package com.example.SPExtractorBackend.service;
 
 import com.example.SPExtractorBackend.dto.DriveDTO;
+import com.example.SPExtractorBackend.entity.Drive;
+import com.example.SPExtractorBackend.repository.DriveRepository;
 import com.example.SPExtractorBackend.response.GraphDrivesResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,23 +13,39 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 import java.util.stream.Collectors;
-
 @Service
 public class DriveService {
+
     private final RestTemplate restTemplate;
+    private final DriveRepository driveRepository;
 
     @Value("${graph.api.base-url}")
     private String graphApiBaseUrl;
 
     @Autowired
-    public DriveService(RestTemplateBuilder restTemplateBuilder) {
+    public DriveService(RestTemplateBuilder restTemplateBuilder, DriveRepository driveRepository) {
         this.restTemplate = restTemplateBuilder.build();
+        this.driveRepository = driveRepository;
     }
 
+    /**
+     * Fetch all drives for a given siteId.
+     * Caches the drives into the database along with the site name and siteId.
+     */
+    public List<DriveDTO> fetchAllDrives(String bearerToken, String siteId, String siteName) {
+        System.out.println("Fetching drives for site: " + siteId);
 
-    public List<DriveDTO> fetchAllDrives(String bearerToken, String siteId) {
+        // Check if drives for this site are already cached
+        List<Drive> cachedDrives = driveRepository.findAllBySiteId(siteId);
+        if (!cachedDrives.isEmpty()) {
+            System.out.println("Returning cached drives from database for site: " + siteId);
+            return cachedDrives.stream()
+                    .map(this::mapToDriveDTO)
+                    .collect(Collectors.toList());
+        }
+
+        // Fetch fresh data from Graph API if not cached
         String url = graphApiBaseUrl + "/sites/" + siteId + "/drives";
-
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(bearerToken);
@@ -38,19 +56,40 @@ public class DriveService {
         ResponseEntity<GraphDrivesResponse> response = restTemplate.exchange(
                 url, HttpMethod.GET, requestEntity, GraphDrivesResponse.class);
 
-        System.out.println(response.getBody());
-
         if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-
-            return response.getBody().getValue().stream()
-                    .map(drive -> new DriveDTO(drive.getId(), drive.getName(), drive.getWebUrl(), drive.getLastModifiedDateTime()))
+            List<DriveDTO> drives = response.getBody().getValue().stream()
+                    .map(drive -> new DriveDTO(
+                            drive.getId(),
+                            drive.getName(),
+                            drive.getWebUrl(),
+                            drive.getLastModifiedDateTime(),
+                            siteId,
+                            siteName // Persist the site name
+                    ))
                     .collect(Collectors.toList());
+
+            // Save drives to the database
+            saveDrivesToDatabase(drives);
+
+            return drives;
         } else {
             throw new RuntimeException("Failed to fetch drives from Microsoft Graph API");
         }
     }
 
+
+    /**
+     * Fetch a single drive by driveId.
+     */
     public DriveDTO fetchDriveById(String bearerToken, String driveId) {
+        // Check if the drive exists in the database
+        Drive cachedDrive = driveRepository.findById(driveId).orElse(null);
+        if (cachedDrive != null) {
+            System.out.println("Returning cached drive: " + cachedDrive.getName());
+            return mapToDriveDTO(cachedDrive);
+        }
+
+        // Fetch fresh data from Graph API if not cached
         String url = graphApiBaseUrl + "/drives/" + driveId;
 
         HttpHeaders headers = new HttpHeaders();
@@ -63,14 +102,46 @@ public class DriveService {
                 url, HttpMethod.GET, requestEntity, DriveDTO.class);
 
         if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-            System.out.println(response.getBody().getName());
-            return response.getBody();
+            DriveDTO driveDTO = response.getBody();
+
+            // Save the drive to the database
+            Drive entity = mapToDriveEntity(driveDTO);
+            driveRepository.save(entity);
+
+            return driveDTO;
         } else {
             throw new RuntimeException("Failed to fetch drive from Microsoft Graph API");
         }
     }
 
+    private void saveDrivesToDatabase(List<DriveDTO> drives) {
+        List<Drive> entities = drives.stream()
+                .map(this::mapToDriveEntity)
+                .collect(Collectors.toList());
+        driveRepository.saveAll(entities);
+        System.out.println("Drives saved successfully to the database.");
+    }
 
+    private Drive mapToDriveEntity(DriveDTO dto) {
+        Drive entity = new Drive();
+        entity.setId(dto.getId());
+        entity.setName(dto.getName());
+        entity.setWebUrl(dto.getWebUrl());
+        entity.setLastModifiedDateTime(dto.getLastModifiedDateTime());
+        entity.setSiteId(dto.getSiteId());
+        entity.setSiteName(dto.getSiteName());
+        return entity;
+    }
 
-
+    private DriveDTO mapToDriveDTO(Drive entity) {
+        return new DriveDTO(
+                entity.getId(),
+                entity.getName(),
+                entity.getWebUrl(),
+                entity.getLastModifiedDateTime(),
+                entity.getSiteId(),
+                entity.getSiteName()
+        );
+    }
 }
+

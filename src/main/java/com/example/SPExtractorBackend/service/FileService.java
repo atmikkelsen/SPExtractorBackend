@@ -33,47 +33,28 @@ public class FileService {
         this.fileRepository = fileRepository;
     }
 
-
     public List<FileDTO> fetchAllFiles(String bearerToken, String driveId) {
+        LocalDateTime threshold = LocalDateTime.now().minusHours(24); // Define data freshness threshold
 
-        // Define the threshold for data freshness (e.g., 1 hour ago)
-        LocalDateTime threshold = LocalDateTime.now().minusHours(24);
-
-        System.out.println("Fetching cached files for driveId: " + driveId);
-        System.out.println("Using threshold: " + threshold);
-
-
-        // Check if recent files exist in the database
+        // Check if recent data exists in the database
         List<File> cachedFiles = fileRepository.findRecentFilesByDriveId(driveId, threshold);
-        System.out.println("Cached files found: " + cachedFiles.size());
-
         if (!cachedFiles.isEmpty()) {
+            System.out.println("Returning cached files from database.");
             return cachedFiles.stream()
                     .map(this::mapToFileDTO)
                     .toList();
-        }else {
-            System.out.println("No recent cached files found. Fetching from Microsoft Graph...");
         }
 
-        // Fetch fresh data from Microsoft Graph if no recent data is available
-
+        System.out.println("No fresh data found. Fetching from Microsoft Graph API...");
+        // Fetch fresh data from the Microsoft Graph API
         List<FileDTO> files = new ArrayList<>();
         fetchFilesRecursively(bearerToken, driveId, "/root", files);
 
-        // Save the files to the database with updated timestamps
-        List<File> entities = files.stream()
-                .map(fileDTO -> {
-                    File entity = mapToFileEntity(fileDTO);
-                    entity.setLastUpdated(LocalDateTime.now()); // Update timestamp
-                    return entity;
-                })
-                .toList();
-        fileRepository.saveAll(entities);
+        // Save fetched data to the database
+        saveFilesToDatabase(files, driveId);
 
         return files;
     }
-
-
 
     private void fetchFilesRecursively(String bearerToken, String driveId, String itemId, List<FileDTO> files) {
         String url = graphApiBaseUrl + "/drives/" + driveId + "/items/" + itemId + "/children";
@@ -94,53 +75,44 @@ public class FileService {
                 List<GraphFilesResponse.Item> items = body.getValue();
 
                 if (items != null && !items.isEmpty()) {
-                    System.out.println("Items fetched: " + items.size());
-
-                    // Process items in batches for concurrent execution
                     processItemsInBatches(items, bearerToken, driveId, files);
-                } else {
-                    System.out.println("No items found in this response.");
                 }
 
-                // Get the next page URL for pagination
-                url = body.getNextLink(); // `getNextLink()` should return `@odata.nextLink` if available
+                url = body.getNextLink(); // Pagination link
             } else {
                 throw new RuntimeException("Failed to fetch files from Microsoft Graph API for item: " + itemId);
             }
         }
     }
 
-
     private void processItemsInBatches(List<GraphFilesResponse.Item> items, String bearerToken, String driveId, List<FileDTO> files) {
-        final int batchSize = 10; // Number of items per batch
-        ExecutorService executor = Executors.newFixedThreadPool(5); // Limit concurrent threads
+        final int batchSize = 10;
+        ExecutorService executor = Executors.newFixedThreadPool(5);
         List<CompletableFuture<Void>> futures = new ArrayList<>();
 
         for (int i = 0; i < items.size(); i += batchSize) {
             int fromIndex = i;
             int toIndex = Math.min(i + batchSize, items.size());
 
-            // Process a batch of items concurrently
             futures.add(CompletableFuture.runAsync(() -> {
                 List<GraphFilesResponse.Item> batch = items.subList(fromIndex, toIndex);
                 for (GraphFilesResponse.Item item : batch) {
-                    processItem(item, bearerToken, driveId, files);
+                    if (!fileRepository.existsByNameAndDriveId(item.getName(), driveId)) {
+                        processItem(item, bearerToken, driveId, files);
+                    }
                 }
             }, executor));
         }
 
-        // Wait for all batches to complete
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
         executor.shutdown();
     }
 
     private void processItem(GraphFilesResponse.Item item, String bearerToken, String driveId, List<FileDTO> files) {
         if (item.isFolder()) {
-            // Recurse into subfolders
             fetchFilesRecursively(bearerToken, driveId, item.getId(), files);
         } else if (item.getSize() > 15 * 1024 * 1024 ||
-                item.getLastModifiedDateTime().isBefore(LocalDateTime.now().minusDays(365))) {
-            // Create a DTO for the file
+                item.getLastModifiedDateTime().isBefore(LocalDateTime.now().minusDays(1095))) {
             FileDTO fileDTO = new FileDTO(
                     item.getName(),
                     item.getSize(),
@@ -149,19 +121,26 @@ public class FileService {
                     item.getLastModifiedBy().getUser().getDisplayName(),
                     driveId
             );
-
-            // Convert to entity and save to the database
-            File entity = mapToFileEntity(fileDTO);
-            entity.setLastUpdated(LocalDateTime.now());
-            fileRepository.save(entity);
-
-            // Add to the in-memory list for return
-            synchronized (files) { // Synchronize to avoid concurrency issues
+            synchronized (files) {
                 files.add(fileDTO);
             }
         }
     }
 
+    private void saveFilesToDatabase(List<FileDTO> files, String driveId) {
+        System.out.println("Saving files to the database...");
+
+        List<File> entities = files.stream()
+                .map(dto -> {
+                    File entity = mapToFileEntity(dto);
+                    entity.setLastUpdated(LocalDateTime.now());
+                    return entity;
+                })
+                .toList();
+
+        fileRepository.saveAll(entities);
+        System.out.println("Files saved successfully to the database.");
+    }
 
     private File mapToFileEntity(FileDTO dto) {
         File entity = new File();
@@ -184,59 +163,6 @@ public class FileService {
                 entity.getDriveId()
         );
     }
-
-
-
-//
-//    private void fetchFilesRecursively(String bearerToken, String driveId, String itemId, List<FileDTO> files) {
-//        String url = graphApiBaseUrl + "/drives/" + driveId + "/items/" + itemId + "/children";
-//        System.out.println("Fetching from URL: " + url);
-//
-//        HttpHeaders headers = new HttpHeaders();
-//        headers.setBearerAuth(bearerToken);
-//        headers.setContentType(MediaType.APPLICATION_JSON);
-//
-//        HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
-//
-//        while (url != null) {
-//            ResponseEntity<GraphFilesResponse> response = restTemplate.exchange(
-//                    url, HttpMethod.GET, requestEntity, GraphFilesResponse.class);
-//
-//            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-//                GraphFilesResponse body = response.getBody();
-//                List<GraphFilesResponse.Item> items = body.getValue();
-//
-//                if (items != null) {
-//                    System.out.println("Items fetched: " + items.size());
-//                    for (GraphFilesResponse.Item item : items) {
-//                        System.out.println("Processing item: " + item.getName());
-//                        if (item.isFolder()) {
-//                            // Recursively fetch items in the folder
-//                            fetchFilesRecursively(bearerToken, driveId, item.getId(), files);
-//                        } else if (item.getSize() > 15 * 1024 * 1024 ||
-//                                item.getLastModifiedDateTime().isBefore(LocalDateTime.now().minusDays(365))) {
-//                            // Add the file to the list if it meets the criteria
-//                            files.add(new FileDTO(
-//                                    item.getName(),
-//                                    item.getSize(),
-//                                    item.getWebUrl(),
-//                                    item.getLastModifiedDateTime(),
-//                                    item.getLastModifiedBy().getUser().getDisplayName()
-//                            ));
-//                        }
-//                    }
-//                } else {
-//                    System.out.println("No items found in this response.");
-//                }
-//
-//                // Update the URL to fetch the next page
-//                url = body.getNextLink(); // `getNextLink` should return `@odata.nextLink`
-//            } else {
-//                throw new RuntimeException("Failed to fetch files from Microsoft Graph API for item: " + itemId);
-//            }
-//        }
-//    }
-
-
-
 }
+
+

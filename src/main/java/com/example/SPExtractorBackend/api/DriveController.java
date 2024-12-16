@@ -24,16 +24,20 @@ public class DriveController {
     public DriveController(DriveService driveService) {
         this.driveService = driveService;
     }
-
     @GetMapping
-    public ResponseEntity<Object> getAllDrives(@RequestHeader("Authorization") String authorizationHeader, @RequestParam String siteId) {
+    public ResponseEntity<Object> getAllDrives(
+            @RequestHeader("Authorization") String authorizationHeader,
+            @RequestParam String siteId,
+            @RequestParam String siteName) {
+
+        System.out.println("sitename::" + siteName);
         try {
             if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.emptyList());
             }
             String token = authorizationHeader.substring(7);
 
-            List<DriveDTO> drives = driveService.fetchAllDrives(token, siteId);
+            List<DriveDTO> drives = driveService.fetchAllDrives(token, siteId, siteName);
             System.out.printf("All drives fetched successfully from Microsoft Graph API%n");
             return ResponseEntity.ok(drives);
         } catch (HttpClientErrorException e) {
