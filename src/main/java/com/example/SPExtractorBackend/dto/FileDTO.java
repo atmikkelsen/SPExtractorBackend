@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 @Setter
 
 public class FileDTO {
+    private String id;
     private String name;
     private long size;
     private String webUrl;
@@ -15,7 +16,8 @@ public class FileDTO {
     private String lastModifiedByDisplayName;
     private String driveId;
 
-    public FileDTO(String name, long size, String webUrl, LocalDateTime lastModifiedDateTime, String lastModifiedByDisplayName, String driveId) {
+    public FileDTO(String id, String name, long size, String webUrl, LocalDateTime lastModifiedDateTime, String lastModifiedByDisplayName, String driveId) {
+        this.id = id;
         this.name = name;
         this.size = size;
         this.webUrl = webUrl;

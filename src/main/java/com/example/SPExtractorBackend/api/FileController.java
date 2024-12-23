@@ -48,6 +48,28 @@ public class FileController {
             }
         }
     }
+    @DeleteMapping("/{driveId}/items/{fileId}")
+    public ResponseEntity<Object> deleteFile(
+            @PathVariable String driveId,
+            @PathVariable String fileId,
+            @RequestHeader("Authorization") String authorizationHeader) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Collections.singletonMap("error", "Authorization header is missing or invalid"));
+        }
+
+        String token = authorizationHeader.substring(7);
+
+        try {
+            fileService.deleteFile(token, driveId, fileId);
+            return ResponseEntity.noContent().build(); // No content on successful delete
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Collections.singletonMap("error", e.getMessage()));
+        }
+    }
+
 
 }
 

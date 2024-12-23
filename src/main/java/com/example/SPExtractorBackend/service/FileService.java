@@ -112,8 +112,9 @@ public class FileService {
         if (item.isFolder()) {
             fetchFilesRecursively(bearerToken, driveId, item.getId(), files);
         } else if (item.getSize() > 15 * 1024 * 1024 ||
-                item.getLastModifiedDateTime().isBefore(LocalDateTime.now().minusDays(1095))) {
+                item.getLastModifiedDateTime().isBefore(LocalDateTime.now().minusDays(365))) {
             FileDTO fileDTO = new FileDTO(
+                    item.getId(),
                     item.getName(),
                     item.getSize(),
                     item.getWebUrl(),
@@ -144,6 +145,7 @@ public class FileService {
 
     private File mapToFileEntity(FileDTO dto) {
         File entity = new File();
+        entity.setId(dto.getId());
         entity.setName(dto.getName());
         entity.setSize(dto.getSize());
         entity.setWebUrl(dto.getWebUrl());
@@ -155,6 +157,7 @@ public class FileService {
 
     private FileDTO mapToFileDTO(File entity) {
         return new FileDTO(
+                entity.getId(),
                 entity.getName(),
                 entity.getSize(),
                 entity.getWebUrl(),
@@ -163,6 +166,33 @@ public class FileService {
                 entity.getDriveId()
         );
     }
+    public void deleteFile(String bearerToken, String driveId, String fileId) {
+        String url = graphApiBaseUrl + "/drives/" + driveId + "/items/" + fileId;
+        System.out.println("Deleting file with URL: " + url);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(bearerToken);
+
+        HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
+
+        try {
+            // Make the DELETE request to Microsoft Graph API
+            ResponseEntity<Void> response = restTemplate.exchange(url, HttpMethod.DELETE, requestEntity, Void.class);
+            if (response.getStatusCode().is2xxSuccessful()) {
+                // If successful, delete the file from the database
+                System.out.println("File successfully deleted from Microsoft Graph. Now removing from the database...");
+                fileRepository.deleteById(fileId);
+                System.out.println("File successfully deleted from the database.");
+            } else {
+                throw new RuntimeException("Failed to delete file. HTTP Status: " + response.getStatusCode());
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Error deleting file: " + e.getMessage(), e);
+        }
+    }
+
+
+
 }
 
 

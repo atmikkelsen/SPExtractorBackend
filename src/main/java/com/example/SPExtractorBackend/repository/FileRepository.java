@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
-public interface FileRepository extends JpaRepository<File, Integer> {
+public interface FileRepository extends JpaRepository<File, String> {
     boolean existsByNameAndDriveId(String name, String driveId);
 
     @Query("SELECT f FROM File f WHERE f.driveId = :driveId AND f.lastUpdated > :threshold")

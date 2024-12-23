@@ -16,8 +16,7 @@ import java.time.LocalDateTime;
 @Entity
 public class File {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY) // or another strategy as per your DB requirements
-    private int id;
+    private String id;
     private String name;
     private long size;
     @Column(name = "web_url", columnDefinition = "TEXT")
