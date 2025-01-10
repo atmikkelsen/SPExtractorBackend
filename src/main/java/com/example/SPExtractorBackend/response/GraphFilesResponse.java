@@ -23,12 +23,9 @@ public class GraphFilesResponse {
         private LocalDateTime lastModifiedDateTime;
         private User lastModifiedBy;
         private User createdBy;
-
-
         public boolean isFolder() {
             return folder != null;
         }
-
         public boolean isFile() {
             return file != null;
         }
@@ -37,7 +34,6 @@ public class GraphFilesResponse {
         public static class User {
             private UserDetail user;
         }
-
         @Setter
         @Getter
         public static class UserDetail {
@@ -46,13 +42,11 @@ public class GraphFilesResponse {
             private String displayName;
         }
     }
-
     @Setter
     @Getter
     public static class File {
         private String mimeType;
     }
-
     @Setter
     @Getter
     public static class Folder {

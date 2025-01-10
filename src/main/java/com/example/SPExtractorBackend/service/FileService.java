@@ -8,6 +8,7 @@ import com.example.SPExtractorBackend.response.GraphFilesResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.cglib.core.Local;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -27,16 +28,19 @@ public class FileService {
     @Value("${graph.api.base-url}")
     private String graphApiBaseUrl;
 
+    // Dependency Injection
     @Autowired
     public FileService(RestTemplateBuilder restTemplateBuilder, FileRepository fileRepository) {
         this.restTemplate = restTemplateBuilder.build();
         this.fileRepository = fileRepository;
     }
 
+    // Fetch all files for a given driveId. If fresh data exists in the database (updated within 24 hours), return it.
+    // Otherwise, retrieve files recursively from Microsoft Graph API and update the database.
     public List<FileDTO> fetchAllFiles(String bearerToken, String driveId) {
         LocalDateTime threshold = LocalDateTime.now().minusHours(24); // Define data freshness threshold
 
-        // Check if recent data exists in the database
+        // Check if recent data exists in the database for files in this drive
         List<File> cachedFiles = fileRepository.findRecentFilesByDriveId(driveId, threshold);
         if (!cachedFiles.isEmpty()) {
             System.out.println("Returning cached files from database.");
@@ -46,16 +50,17 @@ public class FileService {
         }
 
         System.out.println("No fresh data found. Fetching from Microsoft Graph API...");
-        // Fetch fresh data from the Microsoft Graph API
         List<FileDTO> files = new ArrayList<>();
         fetchFilesRecursively(bearerToken, driveId, "/root", files);
 
         // Save fetched data to the database
         saveFilesToDatabase(files, driveId);
-
         return files;
     }
 
+    // Fetch files recursively for a specific driveId and folder (itemId) using the Microsoft Graph API.
+    // Handles nested folder structures by recursively calling itself for subfolders.
+    // Uses pagination to retrieve all files in a folder if results span multiple pages.
     private void fetchFilesRecursively(String bearerToken, String driveId, String itemId, List<FileDTO> files) {
         String url = graphApiBaseUrl + "/drives/" + driveId + "/items/" + itemId + "/children";
 
@@ -65,54 +70,74 @@ public class FileService {
 
         HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
 
-        // Loop for pagination
+        // Loop for pagination links until all files are fetched
         while (url != null) {
             ResponseEntity<GraphFilesResponse> response = restTemplate.exchange(
                     url, HttpMethod.GET, requestEntity, GraphFilesResponse.class);
 
+            // Check if the response is successful and has data
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 GraphFilesResponse body = response.getBody();
                 List<GraphFilesResponse.Item> items = body.getValue();
 
+                // Process items in batches to improve performance
                 if (items != null && !items.isEmpty()) {
                     processItemsInBatches(items, bearerToken, driveId, files);
                 }
-
-                url = body.getNextLink(); // Pagination link
+                // Get the next pagination link to fetch more files if available
+                url = body.getNextLink();
             } else {
                 throw new RuntimeException("Failed to fetch files from Microsoft Graph API for item: " + itemId);
             }
         }
     }
 
+    // Process a list of file items in batches of a fixed size to improve performance.
+    // Leverages a thread pool to process batches asynchronously, reducing overall processing time for large datasets.
     private void processItemsInBatches(List<GraphFilesResponse.Item> items, String bearerToken, String driveId, List<FileDTO> files) {
         final int batchSize = 10;
+        // Create a thread pool with 5 threads
         ExecutorService executor = Executors.newFixedThreadPool(5);
+        // List to hold all CompletableFuture tasks
         List<CompletableFuture<Void>> futures = new ArrayList<>();
 
+        // Process items in batches asynchronously
         for (int i = 0; i < items.size(); i += batchSize) {
             int fromIndex = i;
             int toIndex = Math.min(i + batchSize, items.size());
 
+            // Add a CompletableFuture task to the list for each batch of items
             futures.add(CompletableFuture.runAsync(() -> {
                 List<GraphFilesResponse.Item> batch = items.subList(fromIndex, toIndex);
+                // Process each item in the batch
                 for (GraphFilesResponse.Item item : batch) {
+                    // Check if the file already exists in the database before processing
                     if (!fileRepository.existsByNameAndDriveId(item.getName(), driveId)) {
                         processItem(item, bearerToken, driveId, files);
                     }
                 }
             }, executor));
         }
-
+        // Wait for all CompletableFuture tasks to complete
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
         executor.shutdown();
     }
 
+    // Process a single file or folder item based on specific criteria:
+    // - Folders trigger a recursive fetch.
+    // - Files larger than 15MB or older than 1 year are included in the result list.
+    // Adds qualifying files to the result list in a thread-safe manner.
     private void processItem(GraphFilesResponse.Item item, String bearerToken, String driveId, List<FileDTO> files) {
+        int fileSizeToProcessInMB = 15 * 1024 * 1024;
+        LocalDateTime fileAgeToProcessInDays = LocalDateTime.now().minusDays(365);
+
+        // Check if the item is a folder or file and process accordingly
         if (item.isFolder()) {
             fetchFilesRecursively(bearerToken, driveId, item.getId(), files);
-        } else if (item.getSize() > 15 * 1024 * 1024 ||
-                item.getLastModifiedDateTime().isBefore(LocalDateTime.now().minusDays(365))) {
+        }
+        // Check if the file meets the criteria to be processed and add it to the list
+        else if (item.getSize() > fileSizeToProcessInMB ||
+                item.getLastModifiedDateTime().isBefore(fileAgeToProcessInDays)) {
             FileDTO fileDTO = new FileDTO(
                     item.getId(),
                     item.getName(),
@@ -122,12 +147,14 @@ public class FileService {
                     item.getLastModifiedBy().getUser().getDisplayName(),
                     driveId
             );
+            // Add the file to the list in a thread-safe manner
             synchronized (files) {
                 files.add(fileDTO);
             }
         }
     }
 
+    // Helper method to save files to the database
     private void saveFilesToDatabase(List<FileDTO> files, String driveId) {
         System.out.println("Saving files to the database...");
 
@@ -143,6 +170,7 @@ public class FileService {
         System.out.println("Files saved successfully to the database.");
     }
 
+    // Helper methods to map FileDTO to File entity
     private File mapToFileEntity(FileDTO dto) {
         File entity = new File();
         entity.setId(dto.getId());
@@ -155,6 +183,7 @@ public class FileService {
         return entity;
     }
 
+    // Helper method to map File entity to FileDTO
     private FileDTO mapToFileDTO(File entity) {
         return new FileDTO(
                 entity.getId(),
@@ -166,6 +195,8 @@ public class FileService {
                 entity.getDriveId()
         );
     }
+
+    // Delete a file from Microsoft Graph API and the database
     public void deleteFile(String bearerToken, String driveId, String fileId) {
         String url = graphApiBaseUrl + "/drives/" + driveId + "/items/" + fileId;
         System.out.println("Deleting file with URL: " + url);
@@ -190,9 +221,6 @@ public class FileService {
             throw new RuntimeException("Error deleting file: " + e.getMessage(), e);
         }
     }
-
-
-
 }
 
 

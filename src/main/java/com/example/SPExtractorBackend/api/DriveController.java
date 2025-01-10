@@ -2,7 +2,6 @@ package com.example.SPExtractorBackend.api;
 
 import com.example.SPExtractorBackend.dto.DriveDTO;
 import com.example.SPExtractorBackend.service.DriveService;
-import com.example.SPExtractorBackend.service.SiteService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +23,8 @@ public class DriveController {
     public DriveController(DriveService driveService) {
         this.driveService = driveService;
     }
+
+    // This method is used to get all drives
     @GetMapping
     public ResponseEntity<Object> getAllDrives(
             @RequestHeader("Authorization") String authorizationHeader,
@@ -49,6 +50,7 @@ public class DriveController {
         }
     }
 
+    // This method is used to get a specific drive by its ID
     @GetMapping("/{driveId}")
     public ResponseEntity<DriveDTO> getDriveById(@PathVariable String driveId, @RequestHeader("Authorization") String authorizationHeader) {
         try {

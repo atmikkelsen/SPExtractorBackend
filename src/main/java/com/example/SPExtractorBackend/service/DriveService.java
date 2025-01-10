@@ -22,6 +22,7 @@ public class DriveService {
     @Value("${graph.api.base-url}")
     private String graphApiBaseUrl;
 
+    // Dependency Injection
     @Autowired
     public DriveService(RestTemplateBuilder restTemplateBuilder, DriveRepository driveRepository) {
         this.restTemplate = restTemplateBuilder.build();
@@ -44,18 +45,20 @@ public class DriveService {
                     .collect(Collectors.toList());
         }
 
-        // Fetch fresh data from Graph API if not cached
         String url = graphApiBaseUrl + "/sites/" + siteId + "/drives";
 
+        // Set the request headers
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(bearerToken);
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
 
+        // Send the request to Microsoft Graph API to fetch drives for the site with siteId
         ResponseEntity<GraphDrivesResponse> response = restTemplate.exchange(
                 url, HttpMethod.GET, requestEntity, GraphDrivesResponse.class);
 
+        // Check if the response is successful and has data and map the response to DriveDTO
         if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
             List<DriveDTO> drives = response.getBody().getValue().stream()
                     .map(drive -> new DriveDTO(
@@ -64,7 +67,7 @@ public class DriveService {
                             drive.getWebUrl(),
                             drive.getLastModifiedDateTime(),
                             siteId,
-                            siteName // Persist the site name
+                            siteName // Persist the site name along with the drive as it is not available in the drive response
                     ))
                     .collect(Collectors.toList());
 
@@ -77,12 +80,11 @@ public class DriveService {
         }
     }
 
-
     /**
      * Fetch a single drive by driveId.
      */
     public DriveDTO fetchDriveById(String bearerToken, String driveId) {
-        // Check if the drive exists in the database
+        // Check if the drive exists in the database and return it if found
         Drive cachedDrive = driveRepository.findById(driveId).orElse(null);
         if (cachedDrive != null) {
             System.out.println("Returning cached drive: " + cachedDrive.getName());
@@ -98,6 +100,7 @@ public class DriveService {
 
         HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
 
+        // Send the request to Microsoft Graph API to fetch the drive by driveId
         ResponseEntity<DriveDTO> response = restTemplate.exchange(
                 url, HttpMethod.GET, requestEntity, DriveDTO.class);
 
@@ -114,6 +117,7 @@ public class DriveService {
         }
     }
 
+    // Helper method to save drives to the database
     private void saveDrivesToDatabase(List<DriveDTO> drives) {
         List<Drive> entities = drives.stream()
                 .map(this::mapToDriveEntity)
@@ -122,6 +126,7 @@ public class DriveService {
         System.out.println("Drives saved successfully to the database.");
     }
 
+    // Helper methods to map DriveDTO to Drive entity
     private Drive mapToDriveEntity(DriveDTO dto) {
         Drive entity = new Drive();
         entity.setId(dto.getId());
@@ -133,6 +138,7 @@ public class DriveService {
         return entity;
     }
 
+    // Helper method to map Drive entity to DriveDTO
     private DriveDTO mapToDriveDTO(Drive entity) {
         return new DriveDTO(
                 entity.getId(),

@@ -10,7 +10,6 @@ import java.util.List;
 @Setter
 public class GraphDrivesResponse {
     private List<Drive> value;
-
     @Getter
     @Setter
     public static class Drive {

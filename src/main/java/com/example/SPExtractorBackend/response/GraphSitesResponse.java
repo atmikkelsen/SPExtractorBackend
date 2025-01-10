@@ -10,7 +10,6 @@ import java.util.List;
 public class GraphSitesResponse {
     // Getter and Setter
     private List<Site> value;
-
     @Getter
     @Setter
     public static class Site {

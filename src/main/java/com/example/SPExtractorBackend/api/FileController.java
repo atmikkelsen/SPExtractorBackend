@@ -27,6 +27,7 @@ public class FileController {
         this.fileService = fileService;
     }
 
+    // This method is used to get all files by drive ID
     @GetMapping()
     public ResponseEntity<Object> getFilesByDrive(@RequestHeader("Authorization") String authorizationHeader, @RequestParam String driveId) {
         try {
@@ -48,6 +49,8 @@ public class FileController {
             }
         }
     }
+
+    // This method is used to delete a file by its ID
     @DeleteMapping("/{driveId}/items/{fileId}")
     public ResponseEntity<Object> deleteFile(
             @PathVariable String driveId,

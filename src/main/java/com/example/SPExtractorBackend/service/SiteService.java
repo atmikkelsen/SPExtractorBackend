@@ -26,21 +26,23 @@ public class SiteService {
         this.restTemplate = restTemplateBuilder.build();
     }
 
-
+    // Fetch all sites from Microsoft Graph API using the provided bearer token
     public List<SiteDTO> fetchAllSites(String bearerToken) {
         String url = graphApiBaseUrl + "/sites?search=*";
 
+        // Set the request headers
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(bearerToken);
         headers.setContentType(MediaType.APPLICATION_JSON);
 
         HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
 
+        // Send the request to Microsoft Graph API to fetch all sites
         ResponseEntity<GraphSitesResponse> response = restTemplate.exchange(
                 url, HttpMethod.GET, requestEntity, GraphSitesResponse.class);
 
+        // If the response is successful and the body is not null, map the response to SiteDTO
         if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-
             return response.getBody().getValue().stream()
                     .map(site -> new SiteDTO(site.getId(), site.getName(), site.getWebUrl(), site.getDisplayName()))
                     .collect(Collectors.toList());
@@ -49,6 +51,7 @@ public class SiteService {
         }
     }
 
+    // Fetch a specific site by siteId
     public SiteDTO fetchSiteById(String bearerToken, String siteId) {
         String url = graphApiBaseUrl + "/sites/" + siteId;
 

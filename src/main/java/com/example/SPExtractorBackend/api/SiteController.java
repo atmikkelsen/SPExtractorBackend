@@ -27,9 +27,10 @@ public class SiteController {
     public ResponseEntity<Object> getAllSites(@RequestHeader("Authorization") String authorizationHeader) {
         try {
             if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+                // Return a 400 Bad Request response if the Authorization header is missing or invalid
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap("error", "Authorization header is missing or invalid"));
             }
-
+            // Extract token from the Authorization header
             String token = authorizationHeader.substring(7);
 
             List<SiteDTO> sites = siteService.fetchAllSites(token);
@@ -50,6 +51,7 @@ public class SiteController {
         }
     }
 
+    // This method is used to get a specific site by its ID
     @GetMapping("/{siteId}")
     public ResponseEntity<Object> getSiteById(@PathVariable String siteId, @RequestHeader("Authorization") String authorizationHeader) {
         if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
@@ -60,7 +62,6 @@ public class SiteController {
         try {
             String token = authorizationHeader.substring(7);
 
-            // Pass token to the service
             SiteDTO site = siteService.fetchSiteById(token, siteId);
             System.out.printf("Site fetched successfully from Microsoft Graph API%n");
             return ResponseEntity.ok(site);
