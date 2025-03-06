@@ -9,14 +9,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.cglib.core.Local;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -24,6 +28,9 @@ import java.util.concurrent.Executors;
 public class FileService {
     private final RestTemplate restTemplate;
     private final FileRepository fileRepository;
+
+    private final Set<String> processedFileIds = ConcurrentHashMap.newKeySet();
+
 
     @Value("${graph.api.base-url}")
     private String graphApiBaseUrl;
@@ -63,28 +70,32 @@ public class FileService {
     // Uses pagination to retrieve all files in a folder if results span multiple pages.
     private void fetchFilesRecursively(String bearerToken, String driveId, String itemId, List<FileDTO> files) {
         String url = graphApiBaseUrl + "/drives/" + driveId + "/items/" + itemId + "/children";
-
+    
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(bearerToken);
         headers.setContentType(MediaType.APPLICATION_JSON);
-
         HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
-
-        // Loop for pagination links until all files are fetched
+    
         while (url != null) {
-            ResponseEntity<GraphFilesResponse> response = restTemplate.exchange(
-                    url, HttpMethod.GET, requestEntity, GraphFilesResponse.class);
-
-            // Check if the response is successful and has data
+            // Use the helper with retry logic
+            ResponseEntity<GraphFilesResponse> response = exchangeWithRetry(url, HttpMethod.GET, requestEntity);
+    
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 GraphFilesResponse body = response.getBody();
                 List<GraphFilesResponse.Item> items = body.getValue();
-
-                // Process items in batches to improve performance
+    
                 if (items != null && !items.isEmpty()) {
                     processItemsInBatches(items, bearerToken, driveId, files);
+
+                    // Optionally, save the current batch immediately:
+                    saveFilesToDatabase(new ArrayList<>(files), driveId);
+                    // Clear the in-memory list if you’re only using it as a temporary batch holder
+                    synchronized (files) {
+                        files.clear();
+                    }
                 }
-                // Get the next pagination link to fetch more files if available
+            
+                System.out.println("Fetching URL: " + url);
                 url = body.getNextLink();
             } else {
                 throw new RuntimeException("Failed to fetch files from Microsoft Graph API for item: " + itemId);
@@ -128,8 +139,12 @@ public class FileService {
     // - Files larger than 15MB or older than 1 year are included in the result list.
     // Adds qualifying files to the result list in a thread-safe manner.
     private void processItem(GraphFilesResponse.Item item, String bearerToken, String driveId, List<FileDTO> files) {
+        if (!processedFileIds.add(item.getId())) {
+            // Already processed by another thread
+            return;
+        }
         int fileSizeToProcessInMB = 15 * 1024 * 1024;
-        LocalDateTime fileAgeToProcessInDays = LocalDateTime.now().minusDays(365);
+        LocalDateTime fileAgeToProcessInDays = LocalDateTime.now().minusDays(3650);
 
         // Check if the item is a folder or file and process accordingly
         if (item.isFolder()) {
@@ -154,21 +169,24 @@ public class FileService {
         }
     }
 
-    // Helper method to save files to the database
-    private void saveFilesToDatabase(List<FileDTO> files, String driveId) {
-        System.out.println("Saving files to the database...");
+private void saveFilesToDatabase(List<FileDTO> files, String driveId) {
+    // System.out.println("Saving files to the database...");
 
-        List<File> entities = files.stream()
-                .map(dto -> {
-                    File entity = mapToFileEntity(dto);
-                    entity.setLastUpdated(LocalDateTime.now());
-                    return entity;
-                })
-                .toList();
+    List<File> entities = files.stream()
+            .map(dto -> {
+                File entity = mapToFileEntity(dto);
+                entity.setLastUpdated(LocalDateTime.now());
+                return entity;
+            })
+            .toList();
 
+    try {
         fileRepository.saveAll(entities);
-        System.out.println("Files saved successfully to the database.");
+        // System.out.println("Files saved successfully to the database.");
+    } catch (DataIntegrityViolationException e) {
+        System.err.println("Duplicate entry detected: " + e.getMessage());
     }
+}
 
     // Helper methods to map FileDTO to File entity
     private File mapToFileEntity(FileDTO dto) {
@@ -221,6 +239,40 @@ public class FileService {
             throw new RuntimeException("Error deleting file: " + e.getMessage(), e);
         }
     }
+
+
+
+    private ResponseEntity<GraphFilesResponse> exchangeWithRetry(String url, HttpMethod method, HttpEntity<?> requestEntity) {
+    int maxRetries = 5;
+    int attempt = 0;
+    while (attempt < maxRetries) {
+        try {
+            return restTemplate.exchange(url, method, requestEntity, GraphFilesResponse.class);
+        } catch (HttpClientErrorException e) {
+            // Check for HTTP 429 (Too Many Requests)
+            if (e.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
+                String retryAfterValue = e.getResponseHeaders().getFirst("Retry-After");
+                int sleepTime = retryAfterValue != null ? Integer.parseInt(retryAfterValue) : (int) Math.pow(2, attempt);
+                System.out.println("Throttled by Graph API. Retrying after " + sleepTime + " seconds (attempt " + (attempt + 1) + ")...");
+                try {
+                    Thread.sleep(sleepTime * 1000L);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Interrupted during retry backoff", ie);
+                }
+                attempt++;
+            } else {
+                // Rethrow if it’s any other error
+                throw e;
+            }
+        }
+    }
+    throw new RuntimeException("Exceeded max retries for URL: " + url);
+}
+
+
+
+
 }
 
 
