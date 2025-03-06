@@ -13,7 +13,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/drives")
-@CrossOrigin(origins = "https://localhost:3000", allowedHeaders = {"Authorization", "Content-Type"}, methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.OPTIONS})
+@CrossOrigin(origins = "https://localhost:8443", allowedHeaders = {"Authorization", "Content-Type"}, methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.OPTIONS})
 public class DriveController {
 
     private final DriveService driveService;
@@ -37,6 +37,7 @@ public class DriveController {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.emptyList());
             }
             String token = authorizationHeader.substring(7);
+
 
             List<DriveDTO> drives = driveService.fetchAllDrives(token, siteId, siteName);
             System.out.printf("All drives fetched successfully from Microsoft Graph API%n");
