@@ -5,10 +5,12 @@ import com.example.SPExtractorBackend.dto.FileDTO;
 import com.example.SPExtractorBackend.entity.File;
 import com.example.SPExtractorBackend.repository.FileRepository;
 import com.example.SPExtractorBackend.response.GraphFilesResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
-import org.springframework.cglib.core.Local;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -26,6 +28,7 @@ import java.util.concurrent.Executors;
 
 @Service
 public class FileService {
+    private static final Logger logger = LoggerFactory.getLogger(FileService.class);
     private final RestTemplate restTemplate;
     private final FileRepository fileRepository;
 
@@ -44,25 +47,36 @@ public class FileService {
 
     // Fetch all files for a given driveId. If fresh data exists in the database (updated within 24 hours), return it.
     // Otherwise, retrieve files recursively from Microsoft Graph API and update the database.
+    @Cacheable(value = "files", key = "#driveId")
     public List<FileDTO> fetchAllFiles(String bearerToken, String driveId) {
+        logger.info("[CACHE MISS] Checking for files in drive: {}", driveId);
         LocalDateTime threshold = LocalDateTime.now().minusHours(24); // Define data freshness threshold
 
         // Check if recent data exists in the database for files in this drive
         List<File> cachedFiles = fileRepository.findRecentFilesByDriveId(driveId, threshold);
         if (!cachedFiles.isEmpty()) {
-            System.out.println("Returning cached files from database.");
-            return cachedFiles.stream()
+            logger.info("[DATABASE HIT] Found {} fresh files in database (updated within 24h) - will be cached in memory", cachedFiles.size());
+            List<FileDTO> fileDTOs = cachedFiles.stream()
                     .map(this::mapToFileDTO)
                     .toList();
+            logger.info("[SUCCESS] Returning {} cached files from database", fileDTOs.size());
+            return fileDTOs;
         }
 
-        System.out.println("No fresh data found. Fetching from Microsoft Graph API...");
+        logger.info("[DATABASE MISS] No fresh data found in database. Fetching from Microsoft Graph API...");
         List<FileDTO> files = new ArrayList<>();
         fetchFilesRecursively(bearerToken, driveId, "/root", files);
 
-        // Save fetched data to the database
-        saveFilesToDatabase(files, driveId);
-        return files;
+        logger.info("[API] Fetched total of {} files from Microsoft Graph API", files.size());
+        
+        // Fetch all saved files from database to return (since we clear the list during batch processing)
+        List<File> savedFiles = fileRepository.findRecentFilesByDriveId(driveId, LocalDateTime.now().minusMinutes(5));
+        List<FileDTO> result = savedFiles.stream()
+                .map(this::mapToFileDTO)
+                .toList();
+        
+        logger.info("[API SUCCESS] Returning {} files from database - will be cached in memory", result.size());
+        return result;
     }
 
     // Fetch files recursively for a specific driveId and folder (itemId) using the Microsoft Graph API.
@@ -85,17 +99,23 @@ public class FileService {
                 List<GraphFilesResponse.Item> items = body.getValue();
     
                 if (items != null && !items.isEmpty()) {
+                    logger.debug("[PROCESSING] Processing {} items from current page", items.size());
                     processItemsInBatches(items, bearerToken, driveId, files);
 
                     // Optionally, save the current batch immediately:
-                    saveFilesToDatabase(new ArrayList<>(files), driveId);
-                    // Clear the in-memory list if you’re only using it as a temporary batch holder
-                    synchronized (files) {
-                        files.clear();
+                    if (!files.isEmpty()) {
+                        logger.debug("[DATABASE] Saving batch of {} files to database", files.size());
+                        saveFilesToDatabase(new ArrayList<>(files), driveId);
+                        // Clear the in-memory list if you're only using it as a temporary batch holder
+                        synchronized (files) {
+                            files.clear();
+                        }
                     }
                 }
             
-                System.out.println("Fetching URL: " + url);
+                if (url != null) {
+                    logger.debug("[API] Fetching next page: {}", url);
+                }
                 url = body.getNextLink();
             } else {
                 throw new RuntimeException("Failed to fetch files from Microsoft Graph API for item: " + itemId);
@@ -170,7 +190,10 @@ public class FileService {
     }
 
 private void saveFilesToDatabase(List<FileDTO> files, String driveId) {
-    // System.out.println("Saving files to the database...");
+    if (files.isEmpty()) {
+        logger.debug("[WARNING] No files to save to database");
+        return;
+    }
 
     List<File> entities = files.stream()
             .map(dto -> {
@@ -182,9 +205,9 @@ private void saveFilesToDatabase(List<FileDTO> files, String driveId) {
 
     try {
         fileRepository.saveAll(entities);
-        // System.out.println("Files saved successfully to the database.");
+        logger.info("[DATABASE] Successfully saved {} files to database for drive: {}", entities.size(), driveId);
     } catch (DataIntegrityViolationException e) {
-        System.err.println("Duplicate entry detected: " + e.getMessage());
+        logger.warn("[WARNING] Duplicate entry detected while saving files: {}", e.getMessage());
     }
 }
 
@@ -217,7 +240,7 @@ private void saveFilesToDatabase(List<FileDTO> files, String driveId) {
     // Delete a file from Microsoft Graph API and the database
     public void deleteFile(String bearerToken, String driveId, String fileId) {
         String url = graphApiBaseUrl + "/drives/" + driveId + "/items/" + fileId;
-        System.out.println("Deleting file with URL: " + url);
+        logger.info("[DELETE] Deleting file: {} from drive: {}", fileId, driveId);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(bearerToken);
@@ -229,9 +252,9 @@ private void saveFilesToDatabase(List<FileDTO> files, String driveId) {
             ResponseEntity<Void> response = restTemplate.exchange(url, HttpMethod.DELETE, requestEntity, Void.class);
             if (response.getStatusCode().is2xxSuccessful()) {
                 // If successful, delete the file from the database
-                System.out.println("File successfully deleted from Microsoft Graph. Now removing from the database...");
+                logger.info("[SUCCESS] File successfully deleted from Microsoft Graph API");
                 fileRepository.deleteById(fileId);
-                System.out.println("File successfully deleted from the database.");
+                logger.info("[SUCCESS] File successfully deleted from database");
             } else {
                 throw new RuntimeException("Failed to delete file. HTTP Status: " + response.getStatusCode());
             }
@@ -253,7 +276,7 @@ private void saveFilesToDatabase(List<FileDTO> files, String driveId) {
             if (e.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
                 String retryAfterValue = e.getResponseHeaders().getFirst("Retry-After");
                 int sleepTime = retryAfterValue != null ? Integer.parseInt(retryAfterValue) : (int) Math.pow(2, attempt);
-                System.out.println("Throttled by Graph API. Retrying after " + sleepTime + " seconds (attempt " + (attempt + 1) + ")...");
+                logger.warn("[THROTTLED] API rate limit hit. Retrying after {} seconds (attempt {}/{})", sleepTime, attempt + 1, maxRetries);
                 try {
                     Thread.sleep(sleepTime * 1000L);
                 } catch (InterruptedException ie) {
