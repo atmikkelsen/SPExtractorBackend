@@ -8,7 +8,6 @@ import com.example.SPExtractorBackend.repository.FileRepository;
 import com.example.SPExtractorBackend.response.GraphFilesResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.cache.annotation.Cacheable;
@@ -44,7 +43,6 @@ public class FileService {
     private String graphApiBaseUrl;
 
     // Dependency Injection
-    @Autowired
     public FileService(RestTemplateBuilder restTemplateBuilder, FileRepository fileRepository, DriveRepository driveRepository) {
         this.restTemplate = restTemplateBuilder.build();
         this.fileRepository = fileRepository;

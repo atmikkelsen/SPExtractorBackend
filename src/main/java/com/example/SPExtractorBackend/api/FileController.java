@@ -2,7 +2,6 @@ package com.example.SPExtractorBackend.api;
 
 import com.example.SPExtractorBackend.dto.FileDTO;
 import com.example.SPExtractorBackend.service.FileService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,7 +21,6 @@ public class FileController {
 
     private final FileService fileService;
 
-    @Autowired
     public FileController(FileService fileService) {
         this.fileService = fileService;
     }

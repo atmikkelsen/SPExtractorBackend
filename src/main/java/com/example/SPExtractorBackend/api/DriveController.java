@@ -2,7 +2,6 @@ package com.example.SPExtractorBackend.api;
 
 import com.example.SPExtractorBackend.dto.DriveDTO;
 import com.example.SPExtractorBackend.service.DriveService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,7 +18,6 @@ public class DriveController {
     private final DriveService driveService;
 
 
-    @Autowired
     public DriveController(DriveService driveService) {
         this.driveService = driveService;
     }
