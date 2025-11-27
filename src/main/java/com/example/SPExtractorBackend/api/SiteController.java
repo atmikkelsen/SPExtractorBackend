@@ -1,6 +1,7 @@
 package com.example.SPExtractorBackend.api;
 
 import com.example.SPExtractorBackend.dto.SiteDTO;
+import com.example.SPExtractorBackend.service.FileService;
 import com.example.SPExtractorBackend.service.SiteService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -17,10 +18,12 @@ import java.util.List;
 public class SiteController {
 
     private final SiteService siteService;
+    private final FileService fileService;
 
     @Autowired
-    public SiteController(SiteService siteService) {
+    public SiteController(SiteService siteService, FileService fileService) {
         this.siteService = siteService;
+        this.fileService = fileService;
     }
 
     @GetMapping
@@ -34,7 +37,6 @@ public class SiteController {
             String token = authorizationHeader.substring(7);
 
             List<SiteDTO> sites = siteService.fetchAllSites(token);
-            System.out.printf("All sites fetched successfully from Microsoft Graph API%n");
             return ResponseEntity.ok(sites);
 
         } catch (HttpClientErrorException e) {
@@ -55,7 +57,6 @@ public class SiteController {
     @GetMapping("/{siteId}")
     public ResponseEntity<Object> getSiteById(@PathVariable String siteId, @RequestHeader("Authorization") String authorizationHeader) {
         if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
-            System.out.println("Authorization header is missing or invalid");
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Collections.singletonMap("error", "Authorization header is missing or invalid"));
         }
 
@@ -63,20 +64,28 @@ public class SiteController {
             String token = authorizationHeader.substring(7);
 
             SiteDTO site = siteService.fetchSiteById(token, siteId);
-            System.out.printf("Site fetched successfully from Microsoft Graph API%n");
             return ResponseEntity.ok(site);
 
         } catch (HttpClientErrorException e) {
             if (e.getStatusCode() == HttpStatus.UNAUTHORIZED) {
-                System.out.println("Token expired or invalid");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Collections.singletonMap("error", "Token expired or invalid"));
             } else if (e.getStatusCode() == HttpStatus.FORBIDDEN) {
-                System.out.println("Access denied");
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Collections.singletonMap("error", "Access denied"));
             } else {
-                System.out.println("Unexpected error: " + e.getMessage());
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Collections.singletonMap("error", "An unexpected error occurred"));
             }
+        }
+    }
+
+    // Get cached file count for a site (from database only, no API calls)
+    @GetMapping("/{siteId}/cached-file-count")
+    public ResponseEntity<Object> getCachedFileCount(@PathVariable String siteId) {
+        try {
+            long count = fileService.getCachedFileCountForSite(siteId);
+            return ResponseEntity.ok(Collections.singletonMap("count", count));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Collections.singletonMap("error", "Failed to retrieve cached file count"));
         }
     }
 }

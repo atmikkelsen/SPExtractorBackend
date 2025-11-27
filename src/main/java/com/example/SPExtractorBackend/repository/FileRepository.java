@@ -21,7 +21,6 @@ public interface FileRepository extends JpaRepository<File, String> {
     File findByNameAndDriveId(String name, String driveId);
     void deleteByNameAndDriveId(String name, String driveId);
 
-
-
-
+    @Query("SELECT COUNT(f) FROM File f WHERE f.driveId IN :driveIds AND f.lastUpdated > :threshold")
+    long countRecentFilesByDriveIds(@Param("driveIds") List<String> driveIds, @Param("threshold") LocalDateTime threshold);
 }

@@ -24,11 +24,11 @@ function siteRowTemplate(site) {
     <tr>
       <td><a href="#/drives/${site.id}" class="edit-button">${site.displayName}</a></td>
       <td><a href="#/drives/${site.id}" class="edit-button">${site.webUrl}</a></td>
-      <td>
-        <a class="total-file-count-button" data-site-id="${site.id}">
-          Hent antallet af filer
+      <td id="file-count-cell-${site.id}">
+        <span id="total-file-count-${site.id}">-</span>
+        <a href="#" class="fetch-count-link" data-site-id="${site.id}" data-site-name="${site.displayName}" style="display: none;">
+          Hent antal
         </a>
-        <span id="total-file-count-${site.id}"></span>
       </td>
     </tr>
   `;
@@ -45,15 +45,19 @@ export async function initSites() {
     );
     renderTableRows(sites, siteRowTemplate);
 
-    // Attach event listeners to the "Get Total File Count" buttons
-    const buttons = document.querySelectorAll(".total-file-count-button");
-    buttons.forEach((button) => {
-      button.addEventListener("click", () => {
-        const siteId = button.getAttribute("data-site-id");
-        const siteName = sites.find((site) => site.id === siteId).displayName;
+    // Automatically fetch cached file counts for all sites
+    sites.forEach((site) => {
+      fetchCachedFileCount(site.id);
+    });
 
-        fetchTotalFileCount(siteId, siteName, button);
-      });
+    // Attach event listeners to fetch count links (for manual refresh)
+    document.addEventListener("click", (e) => {
+      if (e.target.classList.contains("fetch-count-link")) {
+        e.preventDefault();
+        const siteId = e.target.getAttribute("data-site-id");
+        const siteName = e.target.getAttribute("data-site-name");
+        fetchTotalFileCount(siteId, siteName, e.target);
+      }
     });
     
     // Setup search bar for filtering sites
@@ -79,13 +83,13 @@ export async function initSites() {
   }
 }
 
-async function fetchTotalFileCount(siteId, siteName, button) {
+async function fetchTotalFileCount(siteId, siteName, link) {
   const totalFileCountSpan = document.getElementById(
     `total-file-count-${siteId}`
   );
 
-  // Hide the button and show "Loading..." with a spinner
-  button.style.display = "none";
+  // Hide the link and show loading spinner
+  link.style.display = "none";
   totalFileCountSpan.innerHTML = `
     <span class="loading-text">Loading...</span>
     <span class="tinyspinner"></span>
@@ -115,7 +119,37 @@ async function fetchTotalFileCount(siteId, siteName, button) {
   } catch (error) {
     console.error("Error fetching total file count:", error.message);
     totalFileCountSpan.textContent = "Error";
-    button.style.display = "inline"; // Show the button again if there's an error
+    link.style.display = "inline"; // Show link again on error
+  }
+}
+
+// Fetch cached file count from database (no API calls to Microsoft Graph)
+async function fetchCachedFileCount(siteId) {
+  const totalFileCountSpan = document.getElementById(
+    `total-file-count-${siteId}`
+  );
+  const fetchLink = document.querySelector(
+    `.fetch-count-link[data-site-id="${siteId}"]`
+  );
+
+  try {
+    const response = await handleFetch(
+      `${API_URL}/sites/${siteId}/cached-file-count`,
+      makeOptions("GET", null, true) // Auth required
+    );
+
+    if (response.count > 0) {
+      // Show the cached count
+      totalFileCountSpan.textContent = response.count;
+    } else {
+      // No cached data, show the "Hent antal" link
+      totalFileCountSpan.textContent = "";
+      fetchLink.style.display = "inline";
+    }
+  } catch (error) {
+    // On error, show the "Hent antal" link
+    totalFileCountSpan.textContent = "";
+    fetchLink.style.display = "inline";
   }
 }
 
