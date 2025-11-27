@@ -4,6 +4,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
 @Getter
 @Setter
 
@@ -15,6 +18,7 @@ public class FileDTO {
     private LocalDateTime lastModifiedDateTime;
     private String lastModifiedByDisplayName;
     private String driveId;
+    private List<String> flagReasons = new ArrayList<>();
 
     public FileDTO(String id, String name, long size, String webUrl, LocalDateTime lastModifiedDateTime, String lastModifiedByDisplayName, String driveId) {
         this.id = id;

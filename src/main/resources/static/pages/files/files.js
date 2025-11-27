@@ -24,8 +24,30 @@ function fileRowTemplate(file) {
       ? `${file.webUrl.substring(0, MAX_URL_LENGTH)}...`
       : file.webUrl;
 
+  // Generate flag badges
+  let flagBadges = "";
+  if (file.flagReasons && file.flagReasons.length > 0) {
+    const badges = file.flagReasons.map(reason => {
+      let color = "";
+      let text = "";
+      if (reason === "large") {
+        color = "#ff6b6b"; // Red
+        text = "Stor fil";
+      } else if (reason === "old") {
+        color = "#ffa500"; // Orange
+        text = "Gammel";
+      } else if (reason === "duplicate") {
+        color = "#4dabf7"; // Blue
+        text = "Duplikat";
+      }
+      return `<span style="background-color: ${color}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-right: 4px; white-space: nowrap;">${text}</span>`;
+    }).join("");
+    flagBadges = badges;
+  }
+
   return `
     <tr id="file-row-${file.id}">
+      <td>${flagBadges}</td>
       <td>${file.name}</td>
       <td><a href="${file.webUrl}" target="_blank">${truncatedUrl}</a></td>
       <td>${fileSize}</td>
@@ -122,16 +144,52 @@ async function deleteFile(fileId, driveId) {
 function initSorting(files) {
   let isSizeAscending = true;
   let isDateAscending = true;
+  let isNameAscending = true;
+  let isFlagAscending = true;
 
+  const flagHeader = document.getElementById("flag-header");
+  const nameHeader = document.getElementById("name-header");
   const sizeHeader = document.getElementById("size-header");
   const dateHeader = document.getElementById("date-header");
+  const flagIndicator = document.getElementById("flag-sort-indicator");
+  const nameIndicator = document.getElementById("name-sort-indicator");
   const sizeIndicator = document.getElementById("size-sort-indicator");
   const dateIndicator = document.getElementById("date-sort-indicator");
 
   function resetIndicators() {
+    flagIndicator.textContent = ""; // Clear flag indicator
+    nameIndicator.textContent = ""; // Clear name indicator
     sizeIndicator.textContent = ""; // Clear size indicator
     dateIndicator.textContent = ""; // Clear date indicator
   }
+
+  // Add event listener for sorting by flag reasons
+  flagHeader.addEventListener("click", () => {
+    const sortedFiles = [...files].sort((a, b) => {
+      const aReasons = (a.flagReasons || []).join(",");
+      const bReasons = (b.flagReasons || []).join(",");
+      return isFlagAscending 
+        ? aReasons.localeCompare(bReasons)
+        : bReasons.localeCompare(aReasons);
+    });
+    isFlagAscending = !isFlagAscending; // Toggle sorting order
+    resetIndicators();
+    flagIndicator.textContent = isFlagAscending ? "▼" : "▲";
+    renderTableRows(sortedFiles, fileRowTemplate);
+  });
+
+  // Add event listener for sorting by name
+  nameHeader.addEventListener("click", () => {
+    const sortedFiles = [...files].sort((a, b) =>
+      isNameAscending
+        ? a.name.localeCompare(b.name)
+        : b.name.localeCompare(a.name)
+    );
+    isNameAscending = !isNameAscending; // Toggle sorting order
+    resetIndicators();
+    nameIndicator.textContent = isNameAscending ? "▼" : "▲";
+    renderTableRows(sortedFiles, fileRowTemplate);
+  });
 
   // Add event listener for sorting by size
   sizeHeader.addEventListener("click", () => {

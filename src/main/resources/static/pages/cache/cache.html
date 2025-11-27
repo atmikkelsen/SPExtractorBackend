@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cache Monitor - SharePoint Cleanup</title>
+    <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+    <link rel="stylesheet" href="../../styles/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <div class="sidebar">
+            <h2 class="logo">SharePoint Cleanup</h2>
+            <nav>
+                <a href="../../index.html">Home</a>
+                <a href="../sites/sites.html">Sites</a>
+                <a href="../drives/drives.html">Drives</a>
+                <a href="../files/files.html">Files</a>
+                <a href="cache.html" class="active">Cache Monitor</a>
+            </nav>
+        </div>
+
+        <div class="main-content">
+            <div class="header">
+                <h1>Cache Monitor</h1>
+                <button id="refreshBtn" class="btn btn-primary">🔄 Refresh Stats</button>
+            </div>
+
+            <div class="cache-overview">
+                <div class="cache-card" id="sitesCache">
+                    <h3>Sites Cache</h3>
+                    <div class="cache-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Entries:</span>
+                            <span class="stat-value" id="sitesSize">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Hit Rate:</span>
+                            <span class="stat-value stat-hitrate" id="sitesHitRate">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Hits:</span>
+                            <span class="stat-value" id="sitesHits">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Misses:</span>
+                            <span class="stat-value" id="sitesMisses">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Evictions:</span>
+                            <span class="stat-value" id="sitesEvictions">-</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-danger btn-small" onclick="clearCache('sites')">Clear Cache</button>
+                </div>
+
+                <div class="cache-card" id="drivesCache">
+                    <h3>Drives Cache</h3>
+                    <div class="cache-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Entries:</span>
+                            <span class="stat-value" id="drivesSize">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Hit Rate:</span>
+                            <span class="stat-value stat-hitrate" id="drivesHitRate">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Hits:</span>
+                            <span class="stat-value" id="drivesHits">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Misses:</span>
+                            <span class="stat-value" id="drivesMisses">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Evictions:</span>
+                            <span class="stat-value" id="drivesEvictions">-</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-danger btn-small" onclick="clearCache('drives')">Clear Cache</button>
+                </div>
+
+                <div class="cache-card" id="filesCache">
+                    <h3>Files Cache</h3>
+                    <div class="cache-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Entries:</span>
+                            <span class="stat-value" id="filesSize">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Hit Rate:</span>
+                            <span class="stat-value stat-hitrate" id="filesHitRate">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Hits:</span>
+                            <span class="stat-value" id="filesHits">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Misses:</span>
+                            <span class="stat-value" id="filesMisses">-</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Evictions:</span>
+                            <span class="stat-value" id="filesEvictions">-</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-danger btn-small" onclick="clearCache('files')">Clear Cache</button>
+                </div>
+            </div>
+
+            <div class="cache-info">
+                <h3>Cache Information</h3>
+                <p><strong>Cache Type:</strong> Caffeine (In-Memory)</p>
+                <p><strong>Maximum Size:</strong> 10,000 entries per cache</p>
+                <p><strong>Expiration:</strong> 24 hours after write</p>
+                <p><strong>Auto-refresh:</strong> <span id="autoRefreshStatus">Enabled</span> (every 5 seconds)</p>
+                
+                <div class="cache-actions">
+                    <button class="btn btn-danger" onclick="clearAllCaches()">Clear All Caches</button>
+                    <button class="btn btn-secondary" onclick="toggleAutoRefresh()" id="toggleAutoRefreshBtn">Disable Auto-refresh</button>
+                </div>
+            </div>
+
+            <div class="cache-legend">
+                <h3>Understanding Cache Performance</h3>
+                <ul>
+                    <li><strong>Hit Rate > 80%:</strong> Excellent - Cache is working very effectively</li>
+                    <li><strong>Hit Rate 60-80%:</strong> Good - Cache is providing benefit</li>
+                    <li><strong>Hit Rate < 60%:</strong> Poor - Consider adjusting cache settings or data access patterns</li>
+                    <li><strong>Evictions:</strong> Number of items removed due to size/time limits</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="cache.js" type="module"></script>
+</body>
+</html>
