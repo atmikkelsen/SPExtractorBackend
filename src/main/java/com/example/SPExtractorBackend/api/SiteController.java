@@ -3,7 +3,6 @@ package com.example.SPExtractorBackend.api;
 import com.example.SPExtractorBackend.dto.SiteDTO;
 import com.example.SPExtractorBackend.service.FileService;
 import com.example.SPExtractorBackend.service.SiteService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,7 +19,6 @@ public class SiteController {
     private final SiteService siteService;
     private final FileService fileService;
 
-    @Autowired
     public SiteController(SiteService siteService, FileService fileService) {
         this.siteService = siteService;
         this.fileService = fileService;

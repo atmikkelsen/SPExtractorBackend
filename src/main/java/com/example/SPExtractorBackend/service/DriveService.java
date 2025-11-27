@@ -6,7 +6,6 @@ import com.example.SPExtractorBackend.repository.DriveRepository;
 import com.example.SPExtractorBackend.response.GraphDrivesResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.cache.annotation.Cacheable;
@@ -27,7 +26,6 @@ public class DriveService {
     private String graphApiBaseUrl;
 
     // Dependency Injection
-    @Autowired
     public DriveService(RestTemplateBuilder restTemplateBuilder, DriveRepository driveRepository) {
         this.restTemplate = restTemplateBuilder.build();
         this.driveRepository = driveRepository;

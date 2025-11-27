@@ -32,8 +32,7 @@ public class CacheController {
         for (String cacheName : cacheManager.getCacheNames()) {
             org.springframework.cache.Cache cache = cacheManager.getCache(cacheName);
             
-            if (cache instanceof CaffeineCache) {
-                CaffeineCache caffeineCache = (CaffeineCache) cache;
+            if (cache instanceof CaffeineCache caffeineCache) {
                 Cache<Object, Object> nativeCache = caffeineCache.getNativeCache();
                 CacheStats cacheStats = nativeCache.stats();
                 
@@ -41,7 +40,7 @@ public class CacheController {
                 cacheInfo.put("size", nativeCache.estimatedSize());
                 cacheInfo.put("hitCount", cacheStats.hitCount());
                 cacheInfo.put("missCount", cacheStats.missCount());
-                cacheInfo.put("hitRate", String.format("%.2f%%", cacheStats.hitRate() * 100));
+                cacheInfo.put("hitRate", "%.2f%%".formatted(cacheStats.hitRate() * 100));
                 cacheInfo.put("evictionCount", cacheStats.evictionCount());
                 cacheInfo.put("loadSuccessCount", cacheStats.loadSuccessCount());
                 

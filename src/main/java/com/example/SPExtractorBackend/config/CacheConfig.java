@@ -18,7 +18,7 @@ public class CacheConfig {
     private static final Logger logger = LoggerFactory.getLogger(CacheConfig.class);
 
     @Bean
-    public CacheManager cacheManager() {
+    CacheManager cacheManager() {
         logger.info("[CACHE] Initializing Cache Manager with Caffeine");
         
         CaffeineCacheManager cacheManager = new CaffeineCacheManager("sites", "drives", "files");
