@@ -14,7 +14,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/files")
 @CrossOrigin(
-        origins = "https://localhost:3000",
+        origins = "https://localhost:8443",
         allowedHeaders = {"Authorization", "Content-Type"},
         methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.OPTIONS}
 )
