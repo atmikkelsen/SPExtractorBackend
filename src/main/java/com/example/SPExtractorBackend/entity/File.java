@@ -26,6 +26,8 @@ public class File {
     private String driveId;
     @Column(name = "last_updated")
     private LocalDateTime lastUpdated;
+    @Column(name = "flag_reasons", length = 500)
+    private String flagReasons;  // Comma-separated: "large,old,duplicate"
 
 
 

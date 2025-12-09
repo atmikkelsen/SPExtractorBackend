@@ -23,4 +23,10 @@ public interface FileRepository extends JpaRepository<File, String> {
 
     @Query("SELECT COUNT(f) FROM File f WHERE f.driveId IN :driveIds AND f.lastUpdated > :threshold")
     long countRecentFilesByDriveIds(@Param("driveIds") List<String> driveIds, @Param("threshold") LocalDateTime threshold);
+
+    // For scheduled sync - check if cache is stale
+    List<File> findByDriveIdAndLastUpdatedAfter(String driveId, LocalDateTime threshold);
+
+    // For cleanup - find old cached files
+    List<File> findByLastUpdatedBefore(LocalDateTime threshold);
 }

@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -37,6 +38,8 @@ public class FileService {
     private final Set<String> processedFileIds = ConcurrentHashMap.newKeySet();
     private final AtomicInteger totalFilesSaved = new AtomicInteger(0);
     private final ConcurrentHashMap<String, Integer> fileNameCounts = new ConcurrentHashMap<>();
+    private final AtomicInteger totalItemsProcessed = new AtomicInteger(0);
+    private final AtomicInteger totalFoldersScanned = new AtomicInteger(0);
 
 
     @Value("${graph.api.base-url}")
@@ -53,77 +56,71 @@ public class FileService {
     // Otherwise, retrieve files recursively from Microsoft Graph API and update the database.
     @Cacheable(value = "files", key = "#driveId")
     public List<FileDTO> fetchAllFiles(String bearerToken, String driveId) {
+        return fetchAllFiles(bearerToken, driveId, false);
+    }
+
+    // Internal method with forceRefresh parameter for scheduled jobs
+    public List<FileDTO> fetchAllFiles(String bearerToken, String driveId, boolean forceRefresh) {
         logger.info("[CACHE MISS] Checking for files in drive: {}", driveId);
         LocalDateTime threshold = LocalDateTime.now().minusHours(24); // Define data freshness threshold
 
         // Check if recent data exists in the database for files in this drive
-        List<File> cachedFiles = fileRepository.findRecentFilesByDriveId(driveId, threshold);
-        if (!cachedFiles.isEmpty()) {
-            logger.info("[DATABASE HIT] Found {} fresh files in database (updated within 24h) - will be cached in memory", cachedFiles.size());
-            List<FileDTO> fileDTOs = cachedFiles.stream()
-                    .map(this::mapToFileDTO)
-                    .toList();
-            logger.info("[SUCCESS] Returning {} cached files from database", fileDTOs.size());
-            return fileDTOs;
+        // Skip this check if forceRefresh is true (used by scheduled jobs)
+        if (!forceRefresh) {
+            List<File> cachedFiles = fileRepository.findRecentFilesByDriveId(driveId, threshold);
+            if (!cachedFiles.isEmpty()) {
+                logger.info("[DATABASE HIT] Found {} fresh files in database (updated within 24h) - will be cached in memory", cachedFiles.size());
+                
+                // Log how many have flagReasons in database
+                long filesWithFlags = cachedFiles.stream()
+                        .filter(f -> f.getFlagReasons() != null && !f.getFlagReasons().isEmpty())
+                        .count();
+                logger.info("[DATABASE] {} out of {} files have flagReasons stored", filesWithFlags, cachedFiles.size());
+                
+                List<FileDTO> fileDTOs = cachedFiles.stream()
+                        .map(this::mapToFileDTO)
+                        .filter(dto -> !dto.getFlagReasons().isEmpty())
+                        .toList();
+                logger.info("[SUCCESS] Returning {} flagged files from database", fileDTOs.size());
+                return fileDTOs;
+            }
+        } else {
+            logger.info("[FORCE REFRESH] Skipping database cache check, fetching fresh data from API");
         }
 
         logger.info("[DATABASE MISS] No fresh data found in database. Fetching from Microsoft Graph API...");
-        processedFileIds.clear(); // Clear the processed IDs set for this drive fetch
-        fileNameCounts.clear(); // Clear the filename counts for this drive fetch
-        
-        List<FileDTO> files = new ArrayList<>();
-        totalFilesSaved.set(0); // Reset counter for this drive
-        
-        // Single pass: collect files that meet size criteria (>= 15MB)
-        fetchFilesRecursively(bearerToken, driveId, "/root", files);
-        
-        logger.info("[API] Fetched {} files (>= 15MB) from Microsoft Graph API", files.size());
-        
-        // Count filename occurrences for duplicate detection
-        for (FileDTO file : files) {
-            String fileName = file.getName().toLowerCase();
-            fileNameCounts.put(fileName, fileNameCounts.getOrDefault(fileName, 0) + 1);
-        }
-        
-        // Filter based on: >50MB OR >5 years OR duplicate
-        long largeFileThreshold = 50L * 1024 * 1024; // 50 MB
-        LocalDateTime fiveYearsAgo = LocalDateTime.now().minusYears(5);
-        List<FileDTO> filteredFiles = new ArrayList<>();
-        
-        for (FileDTO file : files) {
-            String fileName = file.getName().toLowerCase();
-            int nameCount = fileNameCounts.getOrDefault(fileName, 1);
-            boolean isDuplicate = nameCount > 1;
-            boolean isLarge = file.getSize() > largeFileThreshold;
-            boolean isOld = file.getLastModifiedDateTime().isBefore(fiveYearsAgo);
-            
-            if (isLarge || isOld || isDuplicate) {
-                // Add reasons for flagging
-                if (isLarge) file.getFlagReasons().add("large");
-                if (isOld) file.getFlagReasons().add("old");
-                if (isDuplicate) file.getFlagReasons().add("duplicate");
-                
-                filteredFiles.add(file);
-            }
-        }
-        
-        logger.info("[FILTER] {} files match criteria (duplicates: {}, large: {}, old: {})", 
-                filteredFiles.size(),
-                filteredFiles.stream().filter(f -> fileNameCounts.get(f.getName().toLowerCase()) > 1).count(),
-                filteredFiles.stream().filter(f -> f.getSize() > largeFileThreshold).count(),
-                filteredFiles.stream().filter(f -> f.getLastModifiedDateTime().isBefore(fiveYearsAgo)).count());
-        
-        // Save filtered files to database
-        if (!filteredFiles.isEmpty()) {
-            int savedCount = saveFilesToDatabase(filteredFiles, driveId);
-            totalFilesSaved.set(savedCount);
-        }
 
-        if (totalFilesSaved.get() > 0) {
-            logger.info("[DATABASE] Successfully saved {} total files to database for drive: {}", totalFilesSaved.get(), driveId);
-        }
-        logger.info("[API SUCCESS] Returning {} filtered files - will be cached in memory", filteredFiles.size());
-        return filteredFiles;
+        // Fetch files from Microsoft Graph API recursively
+        List<FileDTO> files = new ArrayList<>();
+        processedFileIds.clear();
+        totalFilesSaved.set(0);
+        fileNameCounts.clear();
+        totalItemsProcessed.set(0);
+        totalFoldersScanned.set(0);
+
+        logger.info("[SCAN START] Beginning recursive scan from root folder...");
+        
+        // Start recursive fetch from root folder
+        fetchFilesRecursively(bearerToken, driveId, "root", files);
+
+        logger.info("[API SUCCESS] Collected {} files ≥15MB from Microsoft Graph API", files.size());
+        logger.info("[SCAN COMPLETE] Scanned {} folders, processed {} items total", 
+                totalFoldersScanned.get(), totalItemsProcessed.get());
+
+        // Apply flags based on criteria
+        applyFileFlags(files, driveId);
+
+        // Save files to database
+        int savedCount = saveFilesToDatabase(files, driveId);
+        logger.info("[DATABASE] Saved {} files to database", savedCount);
+
+        // Filter to return only flagged files
+        List<FileDTO> flaggedFiles = files.stream()
+                .filter(dto -> !dto.getFlagReasons().isEmpty())
+                .toList();
+
+        logger.info("[SUCCESS] Returning {} flagged files out of {} total files", flaggedFiles.size(), files.size());
+        return flaggedFiles;
     }
 
     // Fetch files recursively for a specific driveId and folder (itemId) using the Microsoft Graph API.
@@ -139,6 +136,13 @@ public class FileService {
         HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
     
         int pageCount = 0;
+        int foldersScanned = totalFoldersScanned.incrementAndGet();
+        
+        // Log progress every 10 folders
+        if (foldersScanned % 10 == 0) {
+            logger.info("[PROGRESS] Scanned {} folders, processed {} items, collected {} files ≥15MB", 
+                    foldersScanned, totalItemsProcessed.get(), files.size());
+        }
         while (url != null) {
             pageCount++;
             // Use the helper with retry logic
@@ -149,8 +153,9 @@ public class FileService {
                 List<GraphFilesResponse.Item> items = body.getValue();
     
                 if (items != null && !items.isEmpty()) {
+                    totalItemsProcessed.addAndGet(items.size());
                     if (pageCount == 1) {
-                        logger.info("[PROGRESS] Processing folder with {} items (total files collected: {})", items.size(), files.size());
+                        logger.debug("[FOLDER] Processing folder with {} items (total collected: {})", items.size(), files.size());
                     }
                     processItemsInBatches(items, bearerToken, driveId, files);
                 }
@@ -184,10 +189,8 @@ public class FileService {
                 List<GraphFilesResponse.Item> batch = items.subList(fromIndex, toIndex);
                 // Process each item in the batch
                 for (GraphFilesResponse.Item item : batch) {
-                    // Check if the file already exists in the database before processing
-                    if (!fileRepository.existsByNameAndDriveId(item.getName(), driveId)) {
-                        processItem(item, bearerToken, driveId, files);
-                    }
+                    // Process all items - will update if exists, insert if new
+                    processItem(item, bearerToken, driveId, files);
                 }
             }, executor));
         }
@@ -225,11 +228,43 @@ public class FileService {
                     item.getLastModifiedBy().getUser().getDisplayName(),
                     driveId
             );
+            
+            // Track filename for duplicate detection
+            String fileName = item.getName().toLowerCase();
+            fileNameCounts.compute(fileName, (k, v) -> (v == null) ? 1 : v + 1);
+            
             // Add the file to the list in a thread-safe manner
             synchronized (files) {
                 files.add(fileDTO);
             }
         }
+    }
+
+    // Apply flags to files based on size, age, and duplicate criteria
+    private void applyFileFlags(List<FileDTO> files, String driveId) {
+        long largeFileThreshold = 50L * 1024 * 1024; // 50 MB
+        LocalDateTime fiveYearsAgo = LocalDateTime.now().minusYears(5);
+
+        for (FileDTO file : files) {
+            // Flag large files (>50MB)
+            if (file.getSize() > largeFileThreshold) {
+                file.getFlagReasons().add("large");
+            }
+
+            // Flag old files (>5 years)
+            if (file.getLastModifiedDateTime() != null && 
+                file.getLastModifiedDateTime().isBefore(fiveYearsAgo)) {
+                file.getFlagReasons().add("old");
+            }
+
+            // Flag duplicates (same filename appears multiple times)
+            String fileName = file.getName().toLowerCase();
+            if (fileNameCounts.getOrDefault(fileName, 0) > 1) {
+                file.getFlagReasons().add("duplicate");
+            }
+        }
+        
+        logger.info("[FLAGS] Applied flags to {} files", files.size());
     }
 
 private int saveFilesToDatabase(List<FileDTO> files, String driveId) {
@@ -242,6 +277,10 @@ private int saveFilesToDatabase(List<FileDTO> files, String driveId) {
             .map(dto -> {
                 File entity = mapToFileEntity(dto);
                 entity.setLastUpdated(LocalDateTime.now());
+                // Save flag reasons as comma-separated string
+                if (!dto.getFlagReasons().isEmpty()) {
+                    entity.setFlagReasons(String.join(",", dto.getFlagReasons()));
+                }
                 return entity;
             })
             .toList();
@@ -281,7 +320,7 @@ private int saveFilesToDatabase(List<FileDTO> files, String driveId) {
 
     // Helper method to map File entity to FileDTO
     private FileDTO mapToFileDTO(File entity) {
-        return new FileDTO(
+        FileDTO dto = new FileDTO(
                 entity.getId(),
                 entity.getName(),
                 entity.getSize(),
@@ -290,6 +329,16 @@ private int saveFilesToDatabase(List<FileDTO> files, String driveId) {
                 entity.getLastModifiedByDisplayName(),
                 entity.getDriveId()
         );
+        
+        // Parse flagReasons from comma-separated string to list
+        if (entity.getFlagReasons() != null && !entity.getFlagReasons().isEmpty()) {
+            String[] reasons = entity.getFlagReasons().split(",");
+            for (String reason : reasons) {
+                dto.getFlagReasons().add(reason.trim());
+            }
+        }
+        
+        return dto;
     }
 
     // Delete a file from Microsoft Graph API and the database
@@ -348,6 +397,7 @@ private int saveFilesToDatabase(List<FileDTO> files, String driveId) {
     throw new RuntimeException("Exceeded max retries for URL: " + url);
 }
 
+
     // Get cached file count for a site from database only (no API calls)
     public long getCachedFileCountForSite(String siteId) {
         LocalDateTime threshold = LocalDateTime.now().minusHours(24);
@@ -362,10 +412,28 @@ private int saveFilesToDatabase(List<FileDTO> files, String driveId) {
             return 0;
         }
         
-        // Count files in these drives that are fresh (within 24h)
-        return fileRepository.countRecentFilesByDriveIds(driveIds, threshold);
+        // Count only files with flags (stored in database)
+        long totalCount = 0;
+        for (String driveId : driveIds) {
+            List<File> files = fileRepository.findRecentFilesByDriveId(driveId, threshold);
+            totalCount += files.stream()
+                    .filter(f -> f.getFlagReasons() != null && !f.getFlagReasons().isEmpty())
+                    .count();
+        }
+        
+        return totalCount;
     }
 
+    // Check if drive cache is stale (for hourly incremental sync)
+    public boolean isDriveCacheStale(String driveId, LocalDateTime threshold) {
+        List<File> recentFiles = fileRepository.findRecentFilesByDriveId(driveId, threshold);
+        return recentFiles.isEmpty();
+    }
+
+    /**
+     * REMOVED: syncFilesWithDelta method - delta sync functionality removed after rollback
+     * Using recursive fetch instead for reliability
+     */
 
 }
 
